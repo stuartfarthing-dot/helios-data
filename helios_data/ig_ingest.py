@@ -68,7 +68,9 @@ class IG:
         return self._req("GET", "/markets", params={"searchTerm": term}).json()["markets"]
 
     def daily_prices(self, epic, n):
-        return self._req("GET", f"/prices/{epic}", "3", params={"resolution": "DAY", "max": n}).json()
+        # pageSize=0 turns off IG's paging (default pages are 20 bars, oldest first)
+        return self._req("GET", f"/prices/{epic}", "3",
+                         params={"resolution": "DAY", "max": n, "pageSize": 0}).json()
 
 
 def prices_to_frame(resp: dict) -> pd.DataFrame:
