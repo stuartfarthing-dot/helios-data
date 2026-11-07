@@ -46,6 +46,23 @@ CREATE OR REPLACE VIEW hourly AS SELECT symbol, ts, open, high, low, close, volu
 CREATE OR REPLACE VIEW minute AS SELECT symbol, ts, open, high, low, close, volume FROM bars WHERE source = 'dukascopy' AND timeframe = '1m';
 CREATE OR REPLACE VIEW ig_daily AS SELECT symbol, ts, open, high, low, close, volume FROM bars WHERE source = 'ig' AND timeframe = '1d';
 
+-- Clean trading days built from hourly bars (no Sunday/Saturday stubs).
+-- Gold: New York 17:00 close (FX convention). UK100: London calendar day.
+CREATE OR REPLACE VIEW daily_session AS
+WITH h AS (
+  SELECT symbol, ts, open, high, low, close, volume,
+    CASE WHEN symbol = 'UK100'
+         THEN CAST(timezone('Europe/London', ts AT TIME ZONE 'UTC') AS DATE)
+         ELSE CAST(timezone('America/New_York', ts AT TIME ZONE 'UTC') + INTERVAL 7 HOUR AS DATE)
+    END AS session_date
+  FROM hourly
+)
+SELECT symbol, session_date, arg_min(open, ts) AS open, max(high) AS high, min(low) AS low,
+       arg_max(close, ts) AS close, sum(volume) AS volume, count(*) AS hours
+FROM h
+GROUP BY symbol, session_date
+HAVING dayofweek(session_date) BETWEEN 1 AND 5;
+
 -- What is in the warehouse
 CREATE OR REPLACE VIEW coverage AS
 SELECT source, symbol, timeframe, count(*) AS bars, min(ts) AS first_bar, max(ts) AS last_bar

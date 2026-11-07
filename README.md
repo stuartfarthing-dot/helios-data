@@ -11,7 +11,8 @@ Market prices for Helios research, stored in the cloud and kept up to date autom
 | Table / view | Contents |
 |---|---|
 | `bars` | Every bar: `source`, `symbol`, `timeframe`, `ts` (bar open, UTC), `open`, `high`, `low`, `close`, `volume` |
-| `daily`, `hourly`, `minute` | Dukascopy bars by timeframe |
+| `daily`, `hourly`, `minute` | Dukascopy bars by timeframe (raw `daily` includes short Sunday sessions) |
+| `daily_session` | **Use this for daily analysis:** clean trading days built from hourly bars (Gold: New York 5pm close; UK100: London day) |
 | `ig_daily` | IG daily bars (mid prices) |
 | `coverage` | What's stored: bars, first and last date per market and timeframe |
 | `ingest_log` | Every download run |
