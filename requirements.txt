@@ -1,0 +1,7 @@
+duckdb==1.5.3            # must stay within MotherDuck's supported range
+pandas>=2.2
+numpy>=1.26
+requests>=2.31
+python-dotenv>=1.0
+dukascopy-python==4.0.1  # 5.0.0 fails to import on Python < 3.14
+pytest>=8

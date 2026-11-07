@@ -1,0 +1,15 @@
+# credentials - never commit
+.env
+.env.*
+!.env.example
+
+# local databases and downloads
+data/
+*.duckdb
+*.duckdb.wal
+
+# python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
