@@ -2,25 +2,64 @@
 
 Add a market by adding an entry to INSTRUMENTS. Symbols are Helios's own
 names; each source has its own code for the same market.
+
+Per instrument:
+  dukascopy      Dukascopy instrument code
+  ig_epic        IG epic for IG's own daily prices (optional)
+  asset_class    'index' or 'commodity' - used to group markets in research
+  session_tz     time zone whose calendar defines a trading day
+  session_shift  hours added before taking the date (7 with New York = day ends 17:00 NY)
+  spread         typical IG spread in price units, used as the trading cost in research
+  timeframes     Dukascopy bar sizes to store (minute bars are large - only where needed)
+  history_start  first date to request
 """
 
+ALL_TIMEFRAMES = ["1d", "1h", "1m"]
+DAILY_HOURLY = ["1d", "1h"]
+
 INSTRUMENTS = {
-    "XAUUSD": {
-        "name": "Spot Gold (USD per oz)",
-        "dukascopy": "XAU/USD",
-        "ig_epic": "CS.D.USCGC.TODAY.IP",   # IG Spot Gold DFB - confirm with: python -m helios_data.ig_ingest --find "Spot Gold"
-        "history_start": "2003-01-01",
-    },
-    "UK100": {
-        "name": "FTSE 100",
-        "dukascopy": "E_Futsee-100",
-        "ig_epic": "IX.D.FTSE.DAILY.IP",    # IG FTSE 100 DFB
-        "history_start": "2003-01-01",
-    },
+    # --- original two teaching markets ---
+    "XAUUSD": {"name": "Spot Gold", "dukascopy": "XAU/USD", "ig_epic": "CS.D.USCGC.TODAY.IP",
+               "asset_class": "commodity", "session_tz": "America/New_York", "session_shift": 7,
+               "spread": 0.3, "timeframes": ALL_TIMEFRAMES, "history_start": "2003-01-01"},
+    "UK100":  {"name": "FTSE 100", "dukascopy": "E_Futsee-100", "ig_epic": "IX.D.FTSE.DAILY.IP",
+               "asset_class": "index", "session_tz": "Europe/London", "session_shift": 0,
+               "spread": 1.0, "timeframes": ALL_TIMEFRAMES, "history_start": "2003-01-01"},
+
+    # --- indices (added 9 Nov 2026) ---
+    "US30":   {"name": "Dow Jones 30", "dukascopy": "E_D&J-Ind",
+               "asset_class": "index", "session_tz": "America/New_York", "session_shift": 7,
+               "spread": 2.4, "timeframes": DAILY_HOURLY, "history_start": "2003-01-01"},
+    "US500":  {"name": "S&P 500", "dukascopy": "E_SandP-500",
+               "asset_class": "index", "session_tz": "America/New_York", "session_shift": 7,
+               "spread": 0.5, "timeframes": DAILY_HOURLY, "history_start": "2003-01-01"},
+    "NAS100": {"name": "Nasdaq 100", "dukascopy": "E_NQ-100",
+               "asset_class": "index", "session_tz": "America/New_York", "session_shift": 7,
+               "spread": 1.0, "timeframes": DAILY_HOURLY, "history_start": "2003-01-01"},
+    "GER40":  {"name": "DAX 40", "dukascopy": "E_DAAX",
+               "asset_class": "index", "session_tz": "Europe/Berlin", "session_shift": 0,
+               "spread": 1.2, "timeframes": DAILY_HOURLY, "history_start": "2003-01-01"},
+    "AUS200": {"name": "ASX 200", "dukascopy": "E_XJO-ASX",
+               "asset_class": "index", "session_tz": "Australia/Sydney", "session_shift": 0,
+               "spread": 1.0, "timeframes": DAILY_HOURLY, "history_start": "2003-01-01"},
+
+    # --- commodities (added 9 Nov 2026) ---
+    "XAGUSD": {"name": "Spot Silver", "dukascopy": "XAG/USD",
+               "asset_class": "commodity", "session_tz": "America/New_York", "session_shift": 7,
+               "spread": 0.02, "timeframes": DAILY_HOURLY, "history_start": "2003-01-01"},
+    "XPTUSD": {"name": "Platinum", "dukascopy": "XPT.CMD/USD",
+               "asset_class": "commodity", "session_tz": "America/New_York", "session_shift": 7,
+               "spread": 1.0, "timeframes": DAILY_HOURLY, "history_start": "2003-01-01"},
+    "BRENT":  {"name": "Brent Crude Oil", "dukascopy": "E_Brent",
+               "asset_class": "commodity", "session_tz": "America/New_York", "session_shift": 7,
+               "spread": 0.03, "timeframes": DAILY_HOURLY, "history_start": "2003-01-01"},
+    "COPPER": {"name": "Copper", "dukascopy": "COPPER.CMD/USD",
+               "asset_class": "commodity", "session_tz": "America/New_York", "session_shift": 7,
+               "spread": None, "timeframes": DAILY_HOURLY, "history_start": "2003-01-01"},  # spread set once price units are known
 }
 
-# Dukascopy bar sizes to store. Names are the warehouse's 'timeframe' values.
-DUKASCOPY_TIMEFRAMES = ["1d", "1h", "1m"]
+# Default Dukascopy bar sizes (each instrument can narrow this with 'timeframes').
+DUKASCOPY_TIMEFRAMES = ALL_TIMEFRAMES
 
 # How much new history to pull from IG on the first run (daily bars).
 # IG allows roughly 10,000 historical points a week per account.

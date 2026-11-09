@@ -15,9 +15,11 @@ Market prices for Helios research, stored in the cloud and kept up to date autom
 | `daily_session` | **Use this for daily analysis:** clean trading days built from hourly bars (Gold: New York 5pm close; UK100: London day) |
 | `ig_daily` | IG daily bars (mid prices) |
 | `coverage` | What's stored: bars, first and last date per market and timeframe |
+| `instruments` | Each market: asset class, trading-day calendar, typical IG spread |
+| `state_daily`, `state_monthly`, `vol_state`, `h1_signals`, `market_now` | Research layers: trend state, Bollinger stretch, volatility state, H1a signals |
 | `ingest_log` | Every download run |
 
-Symbols: `XAUUSD` (spot gold), `UK100` (FTSE 100). Add markets in `helios_data/config.py`.
+Markets: Gold (`XAUUSD`) and FTSE 100 (`UK100`) with minute bars; Dow (`US30`), S&P 500 (`US500`), Nasdaq 100 (`NAS100`), DAX (`GER40`), ASX 200 (`AUS200`), Silver (`XAGUSD`), Platinum (`XPTUSD`), Brent (`BRENT`) and Copper (`COPPER`) with daily and hourly bars. Add markets in `helios_data/config.py`; the `instruments` table mirrors it.
 
 Daily bars are UTC days. Dukascopy's UK 100 trades almost around the clock, so its daily bars won't exactly match the FTSE cash session.
 

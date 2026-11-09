@@ -81,3 +81,25 @@ def test_ig_prices_parse_and_store(con):
 def test_points_needed_after_first_run():
     last = datetime(2026, 11, 1)
     assert ig_ingest.points_needed(last, datetime(2026, 11, 6, tzinfo=timezone.utc)) == 8
+
+
+def test_sessions_and_research_views(con):
+    # 300 weekdays of hourly bars for a New York-session market and a Sydney-session market
+    for sym in ("XAUUSD", "AUS200"):
+        df = fake_bars(datetime(2020, 1, 1, tzinfo=timezone.utc), datetime(2021, 6, 1, tzinfo=timezone.utc), "h")
+        db.write_bars(con, "dukascopy", sym, "1h", df)
+    days = dict(con.execute("SELECT symbol, count(*) FROM daily_session GROUP BY 1").fetchall())
+    assert 330 < days["XAUUSD"] < 400 and 330 < days["AUS200"] < 400
+    assert con.execute("SELECT count(*) FROM daily_session WHERE dayofweek(session_date) IN (0, 6)").fetchone()[0] == 0
+    # research layers build and the latest state exists for both markets
+    assert con.execute("SELECT count(DISTINCT symbol) FROM state_daily").fetchone()[0] == 2
+    assert con.execute("SELECT count(*) FROM market_now").fetchone()[0] == 2
+    assert con.execute("SELECT count(*) FROM instruments").fetchone()[0] == len(dukascopy_ingest.INSTRUMENTS)
+
+
+def test_minute_bars_only_where_configured(con, monkeypatch):
+    fetched = []
+    monkeypatch.setattr(dukascopy_ingest, "update", lambda c, s, tf, start=None: fetched.append((s, tf)) or 0)
+    monkeypatch.setattr(dukascopy_ingest.db, "connect", lambda: con)
+    dukascopy_ingest.main(["--symbols", "XAUUSD", "US30"])
+    assert ("XAUUSD", "1m") in fetched and ("US30", "1m") not in fetched and ("US30", "1h") in fetched

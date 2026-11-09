@@ -75,7 +75,8 @@ def main(argv=None):
     con = db.connect()
     failures = []
     for symbol in args.symbols:
-        for tf in args.timeframes:
+        wanted = INSTRUMENTS[symbol].get("timeframes", DUKASCOPY_TIMEFRAMES)
+        for tf in [t for t in args.timeframes if t in wanted]:
             try:
                 n = update(con, symbol, tf, args.start)
                 log.info("DONE %s %s: %d bars written", symbol, tf, n)
