@@ -6,7 +6,8 @@ names; each source has its own code for the same market.
 Per instrument:
   dukascopy      Dukascopy instrument code
   ig_epic        IG epic for IG's own daily prices (optional)
-  asset_class    'index' or 'commodity' - used to group markets in research
+  asset_class    'index', 'commodity', 'bond', 'fx' or 'crypto' - used to group markets in research
+  weekends       True if the market trades at weekends (crypto) - keeps Saturday/Sunday days
   session_tz     time zone whose calendar defines a trading day
   session_shift  hours added before taking the date (7 with New York = day ends 17:00 NY)
   spread         typical IG spread in price units, used as the trading cost in research
@@ -55,7 +56,40 @@ INSTRUMENTS = {
                "spread": 0.03, "timeframes": DAILY_HOURLY, "history_start": "2003-01-01"},
     "COPPER": {"name": "Copper", "dukascopy": "COPPER.CMD/USD",
                "asset_class": "commodity", "session_tz": "America/New_York", "session_shift": 7,
-               "spread": None, "timeframes": DAILY_HOURLY, "history_start": "2003-01-01"},  # spread set once price units are known
+               "spread": 0.005, "timeframes": DAILY_HOURLY, "history_start": "2003-01-01"},  # USD per lb
+    # --- crypto (added 9 Nov 2026) - trades 24/7, UTC calendar days ---
+    "BTCUSD": {"name": "Bitcoin", "dukascopy": "BTC/USD",
+               "asset_class": "crypto", "session_tz": "UTC", "session_shift": 0, "weekends": True,
+               "spread": 40.0, "timeframes": DAILY_HOURLY, "history_start": "2014-01-01"},
+    "ETHUSD": {"name": "Ethereum", "dukascopy": "ETH/USD",
+               "asset_class": "crypto", "session_tz": "UTC", "session_shift": 0, "weekends": True,
+               "spread": 2.0, "timeframes": DAILY_HOURLY, "history_start": "2016-01-01"},
+
+    # --- government bond futures (added 9 Nov 2026) ---
+    "BUND":   {"name": "German Bund", "dukascopy": "BUND.TR/EUR",
+               "asset_class": "bond", "session_tz": "Europe/Berlin", "session_shift": 0,
+               "spread": 0.02, "timeframes": DAILY_HOURLY, "history_start": "2003-01-01"},
+    "GILT":   {"name": "UK Long Gilt", "dukascopy": "UKGILT.TR/GBP",
+               "asset_class": "bond", "session_tz": "Europe/London", "session_shift": 0,
+               "spread": 0.03, "timeframes": DAILY_HOURLY, "history_start": "2003-01-01"},
+    "USTBOND": {"name": "US Treasury Bond", "dukascopy": "USTBOND.TR/USD",
+               "asset_class": "bond", "session_tz": "America/New_York", "session_shift": 7,
+               "spread": 0.03, "timeframes": DAILY_HOURLY, "history_start": "2003-01-01"},
+
+    # --- FX majors (added 9 Nov 2026) - FX day ends 17:00 New York ---
+    "EURUSD": {"name": "EUR/USD", "dukascopy": "EUR/USD",
+               "asset_class": "fx", "session_tz": "America/New_York", "session_shift": 7,
+               "spread": 0.00006, "timeframes": DAILY_HOURLY, "history_start": "2003-01-01"},
+    "GBPUSD": {"name": "GBP/USD", "dukascopy": "GBP/USD",
+               "asset_class": "fx", "session_tz": "America/New_York", "session_shift": 7,
+               "spread": 0.00009, "timeframes": DAILY_HOURLY, "history_start": "2003-01-01"},
+    "USDJPY": {"name": "USD/JPY", "dukascopy": "USD/JPY",
+               "asset_class": "fx", "session_tz": "America/New_York", "session_shift": 7,
+               "spread": 0.007, "timeframes": DAILY_HOURLY, "history_start": "2003-01-01"},
+    "AUDUSD": {"name": "AUD/USD", "dukascopy": "AUD/USD",
+               "asset_class": "fx", "session_tz": "America/New_York", "session_shift": 7,
+               "spread": 0.00006, "timeframes": DAILY_HOURLY, "history_start": "2003-01-01"},
+
 }
 
 # Default Dukascopy bar sizes (each instrument can narrow this with 'timeframes').

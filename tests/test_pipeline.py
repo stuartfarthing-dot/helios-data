@@ -103,3 +103,16 @@ def test_minute_bars_only_where_configured(con, monkeypatch):
     monkeypatch.setattr(dukascopy_ingest.db, "connect", lambda: con)
     dukascopy_ingest.main(["--symbols", "XAUUSD", "US30"])
     assert ("XAUUSD", "1m") in fetched and ("US30", "1m") not in fetched and ("US30", "1h") in fetched
+
+
+def test_crypto_keeps_weekends(con):
+    def all_days(start, end):
+        idx = pd.date_range(start, end, freq="h", tz="UTC", inclusive="left")
+        c = 30000 + np.arange(len(idx), dtype=float)
+        return pd.DataFrame({"ts": idx, "open": c, "high": c + 5, "low": c - 5, "close": c, "volume": 1.0})
+    s, e = datetime(2024, 1, 1, tzinfo=timezone.utc), datetime(2024, 2, 1, tzinfo=timezone.utc)
+    db.write_bars(con, "dukascopy", "BTCUSD", "1h", all_days(s, e))
+    db.write_bars(con, "dukascopy", "EURUSD", "1h", all_days(s, e))
+    n = dict(con.execute("SELECT symbol, count(*) FROM daily_session GROUP BY 1").fetchall())
+    assert n["BTCUSD"] == 31          # every calendar day in January
+    assert 22 <= n["EURUSD"] <= 24    # weekdays only

@@ -46,20 +46,20 @@ CREATE OR REPLACE VIEW hourly AS SELECT symbol, ts, open, high, low, close, volu
 CREATE OR REPLACE VIEW minute AS SELECT symbol, ts, open, high, low, close, volume FROM bars WHERE source = 'dukascopy' AND timeframe = '1m';
 CREATE OR REPLACE VIEW ig_daily AS SELECT symbol, ts, open, high, low, close, volume FROM bars WHERE source = 'ig' AND timeframe = '1d';
 
--- Clean trading days built from hourly bars (no weekend stubs).
+-- Clean trading days built from hourly bars (no weekend stubs, except for 24/7 markets such as crypto).
 -- Each market's trading day follows its own calendar (see the instruments table):
 -- e.g. Gold and US indices end their day at 17:00 New York, the FTSE uses the London date.
 CREATE OR REPLACE VIEW daily_session AS
 WITH h AS (
-  SELECT h.symbol, h.ts, h.open, h.high, h.low, h.close, h.volume,
+  SELECT h.symbol, h.ts, h.open, h.high, h.low, h.close, h.volume, i.weekends,
     CAST(timezone(i.session_tz, h.ts AT TIME ZONE 'UTC') + to_hours(i.session_shift) AS DATE) AS session_date
   FROM hourly h JOIN instruments i USING (symbol)
 )
 SELECT symbol, session_date, arg_min(open, ts) AS open, max(high) AS high, min(low) AS low,
        arg_max(close, ts) AS close, sum(volume) AS volume, count(*) AS hours
 FROM h
-GROUP BY symbol, session_date
-HAVING dayofweek(session_date) BETWEEN 1 AND 5;
+GROUP BY symbol, session_date, weekends
+HAVING weekends OR dayofweek(session_date) BETWEEN 1 AND 5;
 
 -- What is in the warehouse
 CREATE OR REPLACE VIEW coverage AS
@@ -145,10 +145,11 @@ SELECT * FROM h1_signals QUALIFY row_number() OVER (PARTITION BY symbol ORDER BY
 def refresh_instruments(con) -> None:
     """Rewrite the instruments table from config.py so the warehouse matches the code."""
     rows = [
-        (sym, v["name"], v["asset_class"], v["session_tz"], int(v["session_shift"]), v.get("spread"), v["dukascopy"], v.get("ig_epic"))
+        (sym, v["name"], v["asset_class"], v["session_tz"], int(v["session_shift"]), bool(v.get("weekends", False)),
+         v.get("spread"), v["dukascopy"], v.get("ig_epic"))
         for sym, v in INSTRUMENTS.items()
     ]
-    df = pd.DataFrame(rows, columns=["symbol", "name", "asset_class", "session_tz", "session_shift", "spread", "dukascopy", "ig_epic"])
+    df = pd.DataFrame(rows, columns=["symbol", "name", "asset_class", "session_tz", "session_shift", "weekends", "spread", "dukascopy", "ig_epic"])
     con.register("instr_df", df)
     con.execute("CREATE OR REPLACE TABLE instruments AS SELECT * FROM instr_df")
     con.unregister("instr_df")
