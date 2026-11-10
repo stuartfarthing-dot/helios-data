@@ -166,7 +166,12 @@ for _t, (_name, _sector) in UK_SHARES.items():
         "session_tz": "Europe/London", "session_shift": 0,
         "spread": None,                       # cost modelled in research as 0.1% of price (IG UK share spread bets)
         "timeframes": ["1d"], "history_start": "2010-01-01",
+        "active": False,   # UK shares excluded from scope 10 Nov 2026 (H8); history kept, no nightly updates
     }
+
+# Markets the nightly jobs update. Anything with "active": False keeps its history and its row in
+# the instruments table but is skipped unless named explicitly with --symbols.
+ACTIVE = [s for s, v in INSTRUMENTS.items() if v.get("active", True)]
 
 # Default Dukascopy bar sizes (each instrument can narrow this with 'timeframes').
 DUKASCOPY_TIMEFRAMES = ALL_TIMEFRAMES

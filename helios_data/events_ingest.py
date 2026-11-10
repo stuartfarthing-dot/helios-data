@@ -14,9 +14,11 @@ Two feeds, both free and key-less:
 policy_events (BoE / Fed / ECB decisions, UK Budgets) is a curated table maintained by hand in the
 warehouse; it is not touched here.
 
-    python -m helios_data.events_ingest                 # both
-    python -m helios_data.events_ingest --only calendar
+    python -m helios_data.events_ingest                 # calendar (the nightly default)
     python -m helios_data.events_ingest --only dividends --symbols BP VOD
+
+UK shares were taken out of scope on 10 Nov 2026, so dividends are no longer refreshed nightly;
+the tables are kept and can be refreshed by hand with --only dividends.
 """
 
 from __future__ import annotations
@@ -217,7 +219,7 @@ def main(argv=None):
     con.execute(SCHEMA)
     if args.only in (None, "calendar"):
         update_calendar(con)
-    if args.only in (None, "dividends"):
+    if args.only == "dividends":
         res = update_dividends(con, args.symbols)
         if res["got"] == 0:
             raise SystemExit("no dividend history fetched at all - Yahoo may be blocking; check the log")

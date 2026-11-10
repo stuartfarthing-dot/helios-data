@@ -3,7 +3,7 @@
 Each run picks up from the last bar already stored, so the first run
 downloads the full history and later runs only fetch what's new.
 
-    python -m helios_data.dukascopy_ingest                       # all symbols, all timeframes
+    python -m helios_data.dukascopy_ingest                       # all active symbols, all timeframes
     python -m helios_data.dukascopy_ingest --symbols XAUUSD --timeframes 1d
     python -m helios_data.dukascopy_ingest --start 2024-01-01    # override start date
 """
@@ -17,7 +17,7 @@ from datetime import datetime, timedelta, timezone
 import pandas as pd
 
 from . import db
-from .config import DUKASCOPY_TIMEFRAMES, INSTRUMENTS
+from .config import ACTIVE, DUKASCOPY_TIMEFRAMES, INSTRUMENTS
 
 log = logging.getLogger("dukascopy")
 
@@ -66,7 +66,7 @@ def update(con, symbol: str, timeframe: str, start_override: str | None = None, 
 
 def main(argv=None):
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--symbols", nargs="*", default=list(INSTRUMENTS))
+    p.add_argument("--symbols", nargs="*", default=ACTIVE)
     p.add_argument("--timeframes", nargs="*", default=DUKASCOPY_TIMEFRAMES)
     p.add_argument("--start", help="YYYY-MM-DD: re-download from this date")
     args = p.parse_args(argv)
