@@ -3,6 +3,7 @@ name: Update market data
 on:
   schedule:
     - cron: "17 22 * * 1-5"   # weekdays 22:17 UTC, after the European and US cash closes
+    - cron: "17 2 * * 2-6"    # backup run 02:17 UTC, in case the evening run is late or skipped
   workflow_dispatch:
     inputs:
       symbols:
