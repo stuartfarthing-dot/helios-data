@@ -93,6 +93,11 @@ INSTRUMENTS = {
 
 }
 
+# Bonds and FX were taken out of scope by Stuart on 10 Nov 2026: history kept, no nightly updates.
+for _v in INSTRUMENTS.values():
+    if _v["asset_class"] in ("bond", "fx"):
+        _v["active"] = False
+
 # --- UK shares (added 10 Nov 2026) --------------------------------------------------------
 # Every UK share Dukascopy offers (current and former FTSE 100 members, ~117). Daily bars only.
 # Prices are in pence and NOT adjusted for dividends. Sector = ICB industry (approximate, assigned by hand).
