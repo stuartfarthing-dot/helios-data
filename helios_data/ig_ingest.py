@@ -134,6 +134,12 @@ def main(argv=None):
             update_trades(con, ig, days=7)
         except Exception as e:  # never let this stop the price update
             log.warning("IG trade history not updated: %s", e)
+        # IG client sentiment (% of clients long/short) - behavioural data, recorded nightly
+        try:
+            from .ig_sentiment import update as update_sentiment
+            update_sentiment(con, ig)
+        except Exception as e:
+            log.warning("IG client sentiment not updated: %s", e)
     finally:
         ig.logout()
 

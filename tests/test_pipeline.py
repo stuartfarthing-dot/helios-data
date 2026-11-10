@@ -167,3 +167,34 @@ def test_calendar_and_dividends(con):
     assert con.execute("SELECT yahoo_symbol FROM dividends WHERE symbol='BT.L' LIMIT 1").fetchone()[0] == "BT-A.L"
     assert str(con.execute("SELECT min(ex_date) FROM dividends").fetchone()[0]) == "2025-02-20"
     assert con.execute("SELECT count(*), max(ratio) FROM splits WHERE symbol='BP.L'").fetchone() == (1, 0.1)
+
+
+def test_ig_sentiment(con):
+    from helios_data import ig_sentiment as s
+
+    class FakeResp:
+        def __init__(self, data):
+            self.data = data
+
+        def json(self):
+            return self.data
+
+    class FakeIG:
+        def search(self, term):
+            return [{"epic": "X.OTHER", "instrumentName": "Something else", "expiry": "DFB"},
+                    {"epic": "X.FUT", "instrumentName": term + " Mar-27", "expiry": "MAR-27"},
+                    {"epic": "X.DFB", "instrumentName": term + " Cash", "expiry": "DFB"}]
+
+        def _req(self, method, path, version="1", **kw):
+            if path.startswith("/markets/"):
+                return FakeResp({"instrument": {"marketId": "M_" + path.split("/")[-1]}})
+            ids = kw["params"]["marketIds"].split(",")
+            return FakeResp({"clientSentiments": [
+                {"marketId": m, "longPositionPercentage": 60.0, "shortPositionPercentage": 40.0} for m in ids]})
+
+    assert s.pick_epic(FakeIG().search("US 500"), "US 500") == "X.DFB"
+    df = s.update(con, FakeIG())
+    assert len(df) == len(s.MARKETS)
+    s.update(con, FakeIG())   # same day again replaces, not duplicates
+    n, lp = con.execute("SELECT count(*), max(long_pct) FROM ig_sentiment").fetchone()
+    assert n == len(s.MARKETS) and lp == 60.0
