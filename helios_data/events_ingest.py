@@ -14,7 +14,7 @@ Two feeds, both free and key-less:
 policy_events (BoE / Fed / ECB decisions, UK Budgets) is a curated table maintained by hand in the
 warehouse; it is not touched here.
 
-    python -m helios_data.events_ingest                 # calendar (the nightly default)
+    python -m helios_data.events_ingest                 # calendar + ETF daily prices (the nightly default)
     python -m helios_data.events_ingest --only dividends --symbols BP VOD
 
 UK shares were taken out of scope on 10 Nov 2026, so dividends are no longer refreshed nightly;
@@ -206,12 +206,56 @@ def update_dividends(con, tickers=None, fetch=fetch_dividends, pause: float = 1.
     return {"got": got, "empty": empty, "failed": failed}
 
 
+# ---------------------------------------------------------------- ETF daily prices (Yahoo)
+
+# Daily closes for the gold/silver ETFs, adjusted for dividends and splits. Silver miners (SIL, SILJ)
+# are not on Dukascopy; the rest are here too because Yahoo's history is longer. Stored in `bars`
+# with source = 'yahoo', timeframe = '1d', ts = the trading date (NYSE session).
+YAHOO_DAILY = ["GDX", "GDXJ", "SIL", "SILJ", "GLD", "SLV"]
+
+
+def _fetch_yahoo_history(ticker: str):
+    import yfinance as yf
+    return yf.Ticker(ticker).history(period="max", auto_adjust=True)
+
+
+def fetch_yahoo_daily(ticker: str, timeout: float = 60):
+    from concurrent.futures import ThreadPoolExecutor
+    ex = ThreadPoolExecutor(max_workers=1)
+    try:
+        return ex.submit(_fetch_yahoo_history, ticker).result(timeout=timeout)
+    finally:
+        ex.shutdown(wait=False, cancel_futures=True)
+
+
+def update_yahoo_daily(con, tickers=None, fetch=fetch_yahoo_daily) -> dict:
+    from . import db
+    out = {}
+    for t in tickers or YAHOO_DAILY:
+        try:
+            h = fetch(t)
+        except Exception as exc:
+            log.warning("yahoo daily %s failed: %s", t, exc)
+            continue
+        if h is None or len(h) == 0:
+            log.warning("yahoo daily %s: no data", t)
+            continue
+        idx = pd.DatetimeIndex(h.index)
+        df = pd.DataFrame({"ts": pd.to_datetime([d.date() for d in idx]).tz_localize("UTC"),
+                           "open": h["Open"].values, "high": h["High"].values, "low": h["Low"].values,
+                           "close": h["Close"].values, "volume": h["Volume"].values})
+        out[t] = db.write_bars(con, "yahoo", t, "1d", df, note="yfinance auto_adjust")
+        time.sleep(1)
+    log.info("yahoo daily: %s", out)
+    return out
+
+
 # ---------------------------------------------------------------- entry point
 
 def main(argv=None):
     from . import db
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--only", choices=["calendar", "dividends"])
+    p.add_argument("--only", choices=["calendar", "dividends", "etfs"])
     p.add_argument("--symbols", nargs="*", help="UK share tickers without .L (default: all)")
     args = p.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
@@ -219,6 +263,8 @@ def main(argv=None):
     con.execute(SCHEMA)
     if args.only in (None, "calendar"):
         update_calendar(con)
+    if args.only in (None, "etfs"):
+        update_yahoo_daily(con)
     if args.only == "dividends":
         res = update_dividends(con, args.symbols)
         if res["got"] == 0:

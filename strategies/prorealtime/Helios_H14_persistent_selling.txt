@@ -1,0 +1,82 @@
+// =====================================================================
+// HELIOS H14 - buy persistent selling                (ProOrder, DAILY chart)
+// Indices and metals only: FTSE 100, US 500, US Tech 100, Wall Street,
+// Germany 40, Australia 200, Spot Gold, Spot Silver, Platinum.
+// Run one copy per market. Only PositionSize may be changed.
+// Rule fixed and pre-registered 10 Nov 2026 (research/h14-buy-persistent-selling.md) - do not tune.
+//
+// Signal: the FIRST day the market is in "persistent selling":
+//   20-day efficiency ratio <= -0.35 (price has fallen almost in a straight line),
+//   and the day is NOT a panic day and NOT a euphoria day (H13 behaviour states).
+// Entry: buy at the next day's open. Stop: 2 x ATR(14). Long only, no trend filter.
+// Exit (rule B): the first close above the 20-day middle band, or after 20 days.
+// =====================================================================
+DEFPARAM CumulateOrders = False      // one position at a time (per system)
+DEFPARAM PreLoadBars = 400           // enough history for every average below
+
+// ---------------- settings ----------------
+PositionSize = 0.01                  // GBP per point
+// ------------------------------------------
+
+ONCE streak = 0
+
+// Bollinger (20, 2)
+mid = Average[20](close)
+sd = STD[20](close)
+IF sd > 0 THEN
+   bbz = (close - mid) / sd
+ELSE
+   bbz = 0
+ENDIF
+
+// 20-day efficiency ratio: net move / total distance travelled (signed)
+path = SUMMATION[20](ABS(close - close[1]))
+IF path > 0 THEN
+   er = (close - close[20]) / path
+ELSE
+   er = 0
+ENDIF
+
+// Range shock: today's true range / the previous 14-day average true range
+truerng = MAX(high - low, MAX(ABS(high - close[1]), ABS(low - close[1])))
+atrprev = Average[14](truerng)[1]
+IF atrprev > 0 THEN
+   shock = truerng / atrprev
+ELSE
+   shock = 0
+ENDIF
+
+// Consecutive down closes
+IF close < close[1] THEN
+   streak = streak + 1
+ELSE
+   streak = 0
+ENDIF
+
+// Days walking the upper band (closes >= +1.5 SD in the last 10)
+upperdays = SUMMATION[10](bbz >= 1.5)
+
+// Behaviour states (first match wins, as in H13)
+panic = bbz <= -2 AND (shock >= 2 OR streak >= 4)
+euphoria = bbz >= 2 AND upperdays >= 4
+psell = (NOT panic) AND (NOT euphoria) AND er <= -0.35
+
+setup = psell AND NOT psell[1]
+
+atr = Average[14](truerng)               // ATR as used in the backtest (simple average of true range)
+
+// ---------------- entry ----------------
+IF NOT ONMARKET AND setup THEN
+   riskdist = 2 * atr                // 1R = 2 x ATR at the signal
+   entrybar = BarIndex
+   BUY PositionSize PERPOINT AT MARKET      // fills at the next bar's open
+   SET STOP LOSS riskdist                   // hard stop held by IG from the moment of entry
+ENDIF
+
+// ---------------- exit B ----------------
+IF ONMARKET THEN
+   barsheld = BarIndex - entrybar
+   IF close > mid OR barsheld >= 20 THEN
+      SELL AT MARKET
+   ENDIF
+ENDIF

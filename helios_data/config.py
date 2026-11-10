@@ -66,6 +66,20 @@ INSTRUMENTS = {
                "asset_class": "crypto", "session_tz": "UTC", "session_shift": 0, "weekends": True,
                "spread": 2.0, "timeframes": DAILY_HOURLY, "history_start": "2016-01-01"},
 
+    # --- gold and silver ETFs (added 10 Nov 2026, miners lead/lag study) - NYSE cash session ---
+    "GDX":    {"name": "VanEck Gold Miners ETF", "dukascopy": "GDX.US/USD",
+               "asset_class": "etf", "session_tz": "America/New_York", "session_shift": 0,
+               "spread": None, "timeframes": ["1d", "1h"], "history_start": "2010-01-01"},
+    "GDXJ":   {"name": "VanEck Junior Gold Miners ETF", "dukascopy": "GDXJ.US/USD",
+               "asset_class": "etf", "session_tz": "America/New_York", "session_shift": 0,
+               "spread": None, "timeframes": ["1d", "1h"], "history_start": "2010-01-01"},
+    "GLD":    {"name": "SPDR Gold Shares ETF", "dukascopy": "GLD.US/USD",
+               "asset_class": "etf", "session_tz": "America/New_York", "session_shift": 0,
+               "spread": None, "timeframes": ["1d", "1h"], "history_start": "2010-01-01"},
+    "SLV":    {"name": "iShares Silver Trust ETF", "dukascopy": "SLV.US/USD",
+               "asset_class": "etf", "session_tz": "America/New_York", "session_shift": 0,
+               "spread": None, "timeframes": ["1d", "1h"], "history_start": "2010-01-01"},
+
     # --- government bond futures (added 9 Nov 2026) ---
     "BUND":   {"name": "German Bund", "dukascopy": "BUND.TR/EUR",
                "asset_class": "bond", "session_tz": "Europe/Berlin", "session_shift": 0,

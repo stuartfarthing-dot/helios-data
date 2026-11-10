@@ -198,3 +198,15 @@ def test_ig_sentiment(con):
     s.update(con, FakeIG())   # same day again replaces, not duplicates
     n, lp = con.execute("SELECT count(*), max(long_pct) FROM ig_sentiment").fetchone()
     assert n == len(s.MARKETS) and lp == 60.0
+
+
+def test_yahoo_daily(con):
+    from helios_data import events_ingest as ev
+    idx = pd.DatetimeIndex(["2026-11-05", "2026-11-06"]).tz_localize("America/New_York")
+    h = pd.DataFrame({"Open": [50.0, 51.0], "High": [52.0, 53.0], "Low": [49.0, 50.0],
+                      "Close": [51.5, 52.5], "Volume": [1e6, 2e6]}, index=idx)
+    res = ev.update_yahoo_daily(con, ["SIL"], fetch=lambda t: h)
+    ev.update_yahoo_daily(con, ["SIL"], fetch=lambda t: h)   # rerun replaces
+    assert res["SIL"] == 2
+    rows = con.execute("SELECT ts::DATE, close FROM bars WHERE source='yahoo' AND symbol='SIL' ORDER BY ts").fetchall()
+    assert [str(r[0]) for r in rows] == ["2026-11-05", "2026-11-06"] and rows[1][1] == 52.5
