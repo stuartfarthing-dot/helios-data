@@ -43,6 +43,9 @@ YAHOO_TICKERS = {
     "RDSB": "SHEL.L",    # Shell unified its share lines in 2022
     "RBS": "NWG.L",      # renamed NatWest Group
     "RB": "RKT.L",       # Reckitt ticker change
+    "BDEV": "BTRW.L",    # Barratt Redrow
+    "ECM": "RS1.L",      # Electrocomponents -> RS Group
+    "SLA": "ABDN.L",     # Standard Life Aberdeen -> abrdn
 }
 
 SCHEMA = """
@@ -52,6 +55,10 @@ CREATE TABLE IF NOT EXISTS econ_calendar (
 );
 CREATE TABLE IF NOT EXISTS dividends (
   symbol VARCHAR, yahoo_symbol VARCHAR, ex_date DATE, amount DOUBLE,
+  source VARCHAR, loaded_at TIMESTAMP DEFAULT current_timestamp
+);
+CREATE TABLE IF NOT EXISTS splits (
+  symbol VARCHAR, yahoo_symbol VARCHAR, split_date DATE, ratio DOUBLE,
   source VARCHAR, loaded_at TIMESTAMP DEFAULT current_timestamp
 );
 """
@@ -118,9 +125,26 @@ def yahoo_symbol(ticker: str) -> str:
     return YAHOO_TICKERS.get(ticker, f"{ticker}.L")
 
 
-def fetch_dividends(ysym: str) -> pd.Series:
+def fetch_dividends(ysym: str):
+    """Returns (dividends, splits). Yahoo's dividend amounts are already adjusted for later splits
+    and share consolidations; the splits table lets research undo that against unadjusted prices."""
     import yfinance as yf
-    return yf.Ticker(ysym).dividends
+    t = yf.Ticker(ysym)
+    return t.dividends, t.splits
+
+
+def write_splits(con, ticker: str, ysym: str, s) -> int:
+    con.execute("DELETE FROM splits WHERE symbol = ?", [f"{ticker}.L"])
+    if s is None or len(s) == 0:
+        return 0
+    idx = pd.DatetimeIndex(s.index)
+    df = pd.DataFrame({"symbol": f"{ticker}.L", "yahoo_symbol": ysym, "split_date": [d.date() for d in idx],
+                       "ratio": s.astype(float).values, "source": "yahoo"})
+    con.register("spl_df", df)
+    con.execute("INSERT INTO splits (symbol, yahoo_symbol, split_date, ratio, source) "
+                "SELECT symbol, yahoo_symbol, split_date, ratio, source FROM spl_df")
+    con.unregister("spl_df")
+    return len(df)
 
 
 def write_dividends(con, ticker: str, ysym: str, s: pd.Series) -> int:
@@ -139,17 +163,25 @@ def write_dividends(con, ticker: str, ysym: str, s: pd.Series) -> int:
     return len(df)
 
 
-def update_dividends(con, tickers=None, fetch=fetch_dividends, pause: float = 0.5) -> dict:
+def update_dividends(con, tickers=None, fetch=fetch_dividends, pause: float = 1.5) -> dict:
     tickers = tickers or list(UK_SHARES)
     got, empty, failed = 0, [], []
     for t in tickers:
         ysym = yahoo_symbol(t)
-        try:
-            n = write_dividends(con, t, ysym, fetch(ysym))
-        except Exception as exc:
-            log.warning("dividends %s (%s) failed: %s", t, ysym, exc)
+        res = None
+        for attempt in range(3):             # Yahoo rate-limits bursts; back off and retry
+            try:
+                res = fetch(ysym)
+                break
+            except Exception as exc:
+                log.warning("dividends %s (%s) attempt %d failed: %s", t, ysym, attempt + 1, exc)
+                time.sleep(5 * (attempt + 1))
+        if res is None:
             failed.append(t)
             continue
+        divs, spl = res if isinstance(res, tuple) else (res, None)
+        n = write_dividends(con, t, ysym, divs)
+        write_splits(con, t, ysym, spl)
         if n:
             got += 1
         else:

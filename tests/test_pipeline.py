@@ -157,7 +157,8 @@ def test_calendar_and_dividends(con):
         if ysym == "GONE.L":
             return pd.Series(dtype=float)
         idx = pd.DatetimeIndex(["2025-02-20", "2025-08-14"]).tz_localize("Europe/London")
-        return pd.Series([7.5, 8.0], index=idx)
+        spl = pd.Series([0.1], index=pd.DatetimeIndex(["2024-06-03"]).tz_localize("Europe/London"))
+        return pd.Series([7.5, 8.0], index=idx), spl
 
     res = ev.update_dividends(con, ["BP", "BT", "GONE"], fetch=fake_divs, pause=0)
     ev.update_dividends(con, ["BP"], fetch=fake_divs, pause=0)
@@ -165,3 +166,4 @@ def test_calendar_and_dividends(con):
     assert con.execute("SELECT count(*) FROM dividends WHERE symbol='BP.L'").fetchone()[0] == 2
     assert con.execute("SELECT yahoo_symbol FROM dividends WHERE symbol='BT.L' LIMIT 1").fetchone()[0] == "BT-A.L"
     assert str(con.execute("SELECT min(ex_date) FROM dividends").fetchone()[0]) == "2025-02-20"
+    assert con.execute("SELECT count(*), max(ratio) FROM splits WHERE symbol='BP.L'").fetchone() == (1, 0.1)
