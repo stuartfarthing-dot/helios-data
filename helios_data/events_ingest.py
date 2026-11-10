@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import time
 
 import pandas as pd
@@ -125,12 +126,22 @@ def yahoo_symbol(ticker: str) -> str:
     return YAHOO_TICKERS.get(ticker, f"{ticker}.L")
 
 
-def fetch_dividends(ysym: str):
-    """Returns (dividends, splits). Yahoo's dividend amounts are already adjusted for later splits
-    and share consolidations; the splits table lets research undo that against unadjusted prices."""
+def _fetch_yahoo(ysym: str):
     import yfinance as yf
     t = yf.Ticker(ysym)
     return t.dividends, t.splits
+
+
+def fetch_dividends(ysym: str, timeout: float = 30):
+    """Returns (dividends, splits). Yahoo's dividend amounts are already adjusted for later splits
+    and share consolidations; the splits table lets research undo that against unadjusted prices.
+    Yahoo sometimes never answers, so each share gets a hard time limit."""
+    from concurrent.futures import ThreadPoolExecutor
+    ex = ThreadPoolExecutor(max_workers=1)
+    try:
+        return ex.submit(_fetch_yahoo, ysym).result(timeout=timeout)
+    finally:
+        ex.shutdown(wait=False, cancel_futures=True)
 
 
 def write_splits(con, ticker: str, ysym: str, s) -> int:
@@ -179,6 +190,7 @@ def update_dividends(con, tickers=None, fetch=fetch_dividends, pause: float = 1.
         if res is None:
             failed.append(t)
             continue
+        log.info("dividends %s (%s) ok", t, ysym)
         divs, spl = res if isinstance(res, tuple) else (res, None)
         n = write_dividends(con, t, ysym, divs)
         write_splits(con, t, ysym, spl)
@@ -209,6 +221,8 @@ def main(argv=None):
         res = update_dividends(con, args.symbols)
         if res["got"] == 0:
             raise SystemExit("no dividend history fetched at all - Yahoo may be blocking; check the log")
+    con.close()
+    os._exit(0)   # don't wait for any Yahoo request that is still hanging in the background
 
 
 if __name__ == "__main__":
