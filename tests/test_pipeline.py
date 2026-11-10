@@ -132,3 +132,36 @@ def test_ig_trade_parsing():
                              "size": "+0.1", "openLevel": "10861.1", "closeLevel": "10853.3",
                              "profitAndLoss": "-£0.78", "currency": "£"}])
     assert t.loc[0, "pnl_gbp"] == -0.78 and t.loc[0, "size"] == 0.1
+
+
+def test_calendar_and_dividends(con):
+    from helios_data import events_ingest as ev
+    con.execute(ev.SCHEMA)
+    week = [
+        {"title": "Non-Farm Employment Change", "country": "USD", "date": "2026-11-06T08:30:00-05:00",
+         "impact": "High", "forecast": "120K", "previous": "95K"},
+        {"title": "Bank Holiday", "country": "JPY", "date": "2026-11-03T00:00:00-05:00", "impact": "Holiday",
+         "forecast": "", "previous": ""},
+    ]
+    n = ev.update_calendar(con, fetch=lambda url: week if "thisweek" in url else [])
+    assert n == 2
+    # re-running replaces rather than duplicates
+    ev.update_calendar(con, fetch=lambda url: week if "thisweek" in url else [])
+    rows = con.execute("SELECT event_date, event_time_utc, impact, forecast FROM econ_calendar "
+                       "WHERE currency='USD'").fetchall()
+    assert len(rows) == 1
+    assert str(rows[0][1]) == "2026-11-06 13:30:00" and rows[0][2] == "high" and rows[0][3] == "120K"
+    assert con.execute("SELECT count(*) FROM econ_calendar").fetchone()[0] == 2
+
+    def fake_divs(ysym):
+        if ysym == "GONE.L":
+            return pd.Series(dtype=float)
+        idx = pd.DatetimeIndex(["2025-02-20", "2025-08-14"]).tz_localize("Europe/London")
+        return pd.Series([7.5, 8.0], index=idx)
+
+    res = ev.update_dividends(con, ["BP", "BT", "GONE"], fetch=fake_divs, pause=0)
+    ev.update_dividends(con, ["BP"], fetch=fake_divs, pause=0)
+    assert res["got"] == 2 and res["empty"] == ["GONE"]
+    assert con.execute("SELECT count(*) FROM dividends WHERE symbol='BP.L'").fetchone()[0] == 2
+    assert con.execute("SELECT yahoo_symbol FROM dividends WHERE symbol='BT.L' LIMIT 1").fetchone()[0] == "BT-A.L"
+    assert str(con.execute("SELECT min(ex_date) FROM dividends").fetchone()[0]) == "2025-02-20"
