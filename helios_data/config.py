@@ -16,8 +16,8 @@ Per instrument:
   history_start  first date to request
 """
 
-ALL_TIMEFRAMES = ["1d", "1h", "1m"]
-DAILY_HOURLY = ["1d", "1h"]
+ALL_TIMEFRAMES = ["1d", "1h", "15m", "1m"]   # 15m added 10 Nov 2026 (H11)
+DAILY_HOURLY = ["1d", "1h", "15m"]   # name kept for history; 15m added 10 Nov 2026 (H11)
 
 INSTRUMENTS = {
     # --- original two teaching markets ---

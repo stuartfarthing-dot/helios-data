@@ -24,12 +24,12 @@ log = logging.getLogger("dukascopy")
 SOURCE = "dukascopy"
 
 # Chunk size per request batch, so memory stays small on long histories.
-CHUNK = {"1m": timedelta(days=30), "1h": timedelta(days=365), "1d": timedelta(days=3650)}
+CHUNK = {"1m": timedelta(days=30), "15m": timedelta(days=120), "1h": timedelta(days=365), "1d": timedelta(days=3650)}
 
 
 def _interval(timeframe: str):
     import dukascopy_python as dk
-    return {"1m": dk.INTERVAL_MIN_1, "1h": dk.INTERVAL_HOUR_1, "1d": dk.INTERVAL_DAY_1}[timeframe]
+    return {"1m": dk.INTERVAL_MIN_1, "15m": dk.INTERVAL_MIN_15, "1h": dk.INTERVAL_HOUR_1, "1d": dk.INTERVAL_DAY_1}[timeframe]
 
 
 def fetch_range(code: str, timeframe: str, start: datetime, end: datetime) -> pd.DataFrame:
