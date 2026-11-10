@@ -116,3 +116,19 @@ def test_crypto_keeps_weekends(con):
     n = dict(con.execute("SELECT symbol, count(*) FROM daily_session GROUP BY 1").fetchall())
     assert n["BTCUSD"] == 31          # every calendar day in January
     assert 22 <= n["EURUSD"] <= 24    # weekdays only
+
+
+def test_ig_trade_parsing():
+    from helios_data.ig_trades import parse_activity, parse_transactions, _num
+    assert _num("+0.5") == 0.5 and _num("£2.67") == 2.67 and _num("-£1,060.00") == -1060.0 and _num("-") is None
+    a = parse_activity([{"date": "2026-11-10T08:00:01", "epic": "IX.D.FTSE.DAILY.IP", "dealId": "D1",
+                         "type": "POSITION", "status": "ACCEPTED", "description": "Position opened",
+                         "channel": "WEB", "details": {"marketName": "FTSE 100", "direction": "BUY",
+                                                       "size": 0.01, "level": 10851.4, "stopLevel": 10835.4,
+                                                       "actions": [{"actionType": "POSITION_OPENED"}]}}])
+    assert a.loc[0, "level"] == 10851.4 and a.loc[0, "stop_level"] == 10835.4 and a.loc[0, "direction"] == "BUY"
+    t = parse_transactions([{"dateUtc": "2026-11-10T08:05:00", "openDateUtc": "2026-11-10T08:00:30",
+                             "instrumentName": "FTSE 100", "reference": "R1", "transactionType": "DEAL",
+                             "size": "+0.1", "openLevel": "10861.1", "closeLevel": "10853.3",
+                             "profitAndLoss": "-£0.78", "currency": "£"}])
+    assert t.loc[0, "pnl_gbp"] == -0.78 and t.loc[0, "size"] == 0.1

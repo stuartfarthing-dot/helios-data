@@ -128,6 +128,12 @@ def main(argv=None):
         con = db.connect()
         for symbol in args.symbols:
             log.info("DONE %s: %d bars written", symbol, update(con, ig, symbol))
+        # Stuart's own trades (read-only history), for comparing live fills with the backtests
+        try:
+            from .ig_trades import update_trades
+            update_trades(con, ig, days=7)
+        except Exception as e:  # never let this stop the price update
+            log.warning("IG trade history not updated: %s", e)
     finally:
         ig.logout()
 
