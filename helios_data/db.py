@@ -219,10 +219,10 @@ def refresh_instruments(con) -> None:
     """Rewrite the instruments table from config.py so the warehouse matches the code."""
     rows = [
         (sym, v["name"], v["asset_class"], v["session_tz"], int(v["session_shift"]), bool(v.get("weekends", False)),
-         v.get("spread"), v["dukascopy"], v.get("ig_epic"))
+         v.get("spread"), v["dukascopy"], v.get("ig_epic"), v.get("sector"))
         for sym, v in INSTRUMENTS.items()
     ]
-    df = pd.DataFrame(rows, columns=["symbol", "name", "asset_class", "session_tz", "session_shift", "weekends", "spread", "dukascopy", "ig_epic"])
+    df = pd.DataFrame(rows, columns=["symbol", "name", "asset_class", "session_tz", "session_shift", "weekends", "spread", "dukascopy", "ig_epic", "sector"])
     con.register("instr_df", df)
     con.execute("CREATE OR REPLACE TABLE instruments AS SELECT * FROM instr_df")
     con.unregister("instr_df")

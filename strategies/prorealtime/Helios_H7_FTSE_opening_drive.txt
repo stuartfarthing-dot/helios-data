@@ -1,0 +1,39 @@
+// =====================================================================
+// HELIOS H7 - FTSE opening drive            (ProOrder, FTSE 100, 1-MINUTE chart)
+// Platform time zone must be London (UK).
+// If the FTSE has gapped at least 0.5 x daily ATR since yesterday's 16:00,
+// trade in the gap direction from the 08:00 open with a stop 0.10 x daily ATR away,
+// and close at 09:00.  Forward test only - the rule failed its pre-registered
+// test by cost (see research/h7-ftse-opening-drive.md); this measures real costs.
+// =====================================================================
+DEFPARAM CumulateOrders = False
+DEFPARAM PreLoadBars = 3000
+DEFPARAM FlatAfter = 090000          // any open position is closed at 09:00
+
+// ---------------- settings ----------------
+PositionSize = 0.01                  // GBP per point
+GapMin = 0.5                         // gap threshold, in daily ATRs
+StopATR = 0.10                       // stop distance, in daily ATRs
+// ------------------------------------------
+
+// daily ATR from the last completed day
+TIMEFRAME(daily, updateonclose)
+datr = AverageTrueRange[14](close)
+TIMEFRAME(default)
+
+// remember yesterday's 16:00 close (the close of the 15:59 minute)
+IF OpenTime = 155900 THEN
+   close16 = close
+ENDIF
+
+// at the close of the 07:59 minute, decide; the order fills at the 08:00 open
+IF OpenTime = 075900 AND close16 > 0 AND datr > 0 AND NOT ONMARKET THEN
+   gap = (close - close16) / datr
+   IF gap >= GapMin THEN
+      BUY PositionSize PERPOINT AT MARKET
+      SET STOP LOSS StopATR * datr
+   ELSIF gap <= -GapMin THEN
+      SELLSHORT PositionSize PERPOINT AT MARKET
+      SET STOP LOSS StopATR * datr
+   ENDIF
+ENDIF

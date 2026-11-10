@@ -6,7 +6,8 @@ names; each source has its own code for the same market.
 Per instrument:
   dukascopy      Dukascopy instrument code
   ig_epic        IG epic for IG's own daily prices (optional)
-  asset_class    'index', 'commodity', 'bond', 'fx' or 'crypto' - used to group markets in research
+  asset_class    'index', 'commodity', 'bond', 'fx', 'crypto' or 'uk_share' - used to group markets in research
+  sector         ICB industry, for UK shares (optional)
   weekends       True if the market trades at weekends (crypto) - keeps Saturday/Sunday days
   session_tz     time zone whose calendar defines a trading day
   session_shift  hours added before taking the date (7 with New York = day ends 17:00 NY)
@@ -91,6 +92,81 @@ INSTRUMENTS = {
                "spread": 0.00006, "timeframes": DAILY_HOURLY, "history_start": "2003-01-01"},
 
 }
+
+# --- UK shares (added 10 Nov 2026) --------------------------------------------------------
+# Every UK share Dukascopy offers (current and former FTSE 100 members, ~117). Daily bars only.
+# Prices are in pence and NOT adjusted for dividends. Sector = ICB industry (approximate, assigned by hand).
+# Delisted companies are kept on purpose: their history stops when they left, which reduces survivorship bias.
+UK_SHARES = {
+    # ticker: (name, sector)
+    "AAL": ("Anglo American", "Basic Materials"), "ABF": ("Associated British Foods", "Consumer Staples"),
+    "ADM": ("Admiral Group", "Financials"), "ADN": ("Aberdeen", "Financials"),
+    "AGK": ("Aggreko", "Industrials"), "AHT": ("Ashtead", "Industrials"),
+    "AMFW": ("Amec Foster Wheeler", "Energy"), "ANTO": ("Antofagasta", "Basic Materials"),
+    "AVST": ("Avast", "Technology"), "AVV": ("Aveva", "Technology"),
+    "AV": ("Aviva", "Financials"), "AZN": ("AstraZeneca", "Health Care"),
+    "BAB": ("Babcock", "Industrials"), "BARC": ("Barclays", "Financials"),
+    "BATS": ("British American Tobacco", "Consumer Staples"), "BA": ("BAE Systems", "Industrials"),
+    "BDEV": ("Barratt Developments", "Consumer Discretionary"), "BLND": ("British Land", "Real Estate"),
+    "BLT": ("BHP", "Basic Materials"), "BNZL": ("Bunzl", "Industrials"),
+    "BP": ("BP", "Energy"), "BRBY": ("Burberry", "Consumer Discretionary"),
+    "BT": ("BT Group", "Telecommunications"), "CCL": ("Carnival", "Consumer Discretionary"),
+    "CNA": ("Centrica", "Utilities"), "CPG": ("Compass Group", "Consumer Discretionary"),
+    "CPI": ("Capita", "Industrials"), "CRDA": ("Croda", "Basic Materials"),
+    "CRH": ("CRH", "Industrials"), "DCC": ("DCC", "Industrials"),
+    "DGE": ("Diageo", "Consumer Staples"), "DPH": ("Dechra Pharmaceuticals", "Health Care"),
+    "ECM": ("Electrocomponents", "Industrials"), "EXPN": ("Experian", "Industrials"),
+    "EZJ": ("easyJet", "Consumer Discretionary"), "FRES": ("Fresnillo", "Basic Materials"),
+    "GFS": ("G4S", "Industrials"), "GKN": ("GKN", "Industrials"),
+    "GLEN": ("Glencore", "Basic Materials"), "GSK": ("GSK", "Health Care"),
+    "HIK": ("Hikma Pharmaceuticals", "Health Care"), "HLMA": ("Halma", "Industrials"),
+    "HL": ("Hargreaves Lansdown", "Financials"), "HMSO": ("Hammerson", "Real Estate"),
+    "HSBA": ("HSBC", "Financials"), "IAG": ("International Airlines Group", "Consumer Discretionary"),
+    "ICP": ("Intermediate Capital", "Financials"), "IHG": ("InterContinental Hotels", "Consumer Discretionary"),
+    "III": ("3i Group", "Financials"), "IMI": ("IMI", "Industrials"),
+    "IMT": ("Imperial Brands", "Consumer Staples"), "INTU": ("intu Properties", "Real Estate"),
+    "ISAT": ("Inmarsat", "Telecommunications"), "ITRK": ("Intertek", "Industrials"),
+    "ITV": ("ITV", "Consumer Discretionary"), "KGF": ("Kingfisher", "Consumer Discretionary"),
+    "LAND": ("Land Securities", "Real Estate"), "LGEN": ("Legal & General", "Financials"),
+    "LLOY": ("Lloyds Banking Group", "Financials"), "LSE": ("London Stock Exchange Group", "Financials"),
+    "MGGT": ("Meggitt", "Industrials"), "MKS": ("Marks & Spencer", "Consumer Discretionary"),
+    "MNDI": ("Mondi", "Basic Materials"), "MNG": ("M&G", "Financials"),
+    "MRW": ("Morrisons", "Consumer Staples"), "NG": ("National Grid", "Utilities"),
+    "NXT": ("Next", "Consumer Discretionary"), "OCDO": ("Ocado", "Consumer Staples"),
+    "OML": ("Old Mutual", "Financials"), "PFC": ("Petrofac", "Energy"),
+    "PHNX": ("Phoenix Group", "Financials"), "PRU": ("Prudential", "Financials"),
+    "PSN": ("Persimmon", "Consumer Discretionary"), "PSON": ("Pearson", "Consumer Discretionary"),
+    "RBS": ("NatWest (RBS)", "Financials"), "RB": ("Reckitt", "Consumer Staples"),
+    "RDSB": ("Shell (B shares)", "Energy"), "REL": ("RELX", "Consumer Discretionary"),
+    "RIO": ("Rio Tinto", "Basic Materials"), "RMG": ("Royal Mail", "Industrials"),
+    "RMV": ("Rightmove", "Real Estate"), "RRS": ("Randgold Resources", "Basic Materials"),
+    "RR": ("Rolls-Royce", "Industrials"), "RSA": ("RSA Insurance", "Financials"),
+    "RTO": ("Rentokil Initial", "Industrials"), "SBRY": ("Sainsbury's", "Consumer Staples"),
+    "SDR": ("Schroders", "Financials"), "SGE": ("Sage Group", "Technology"),
+    "SGRO": ("Segro", "Real Estate"), "SHP": ("Shire", "Health Care"),
+    "SKY": ("Sky", "Consumer Discretionary"), "SLA": ("Standard Life Aberdeen", "Financials"),
+    "SL": ("Standard Life", "Financials"), "SMDS": ("DS Smith", "Industrials"),
+    "SMIN": ("Smiths Group", "Industrials"), "SMT": ("Scottish Mortgage", "Financials"),
+    "SN": ("Smith & Nephew", "Health Care"), "SPD": ("Frasers Group", "Consumer Discretionary"),
+    "SPX": ("Spirax Group", "Industrials"), "SSE": ("SSE", "Utilities"),
+    "STAN": ("Standard Chartered", "Financials"), "STJ": ("St James's Place", "Financials"),
+    "SVT": ("Severn Trent", "Utilities"), "TATE": ("Tate & Lyle", "Consumer Staples"),
+    "TLW": ("Tullow Oil", "Energy"), "TPK": ("Travis Perkins", "Industrials"),
+    "TSCO": ("Tesco", "Consumer Staples"), "TUI": ("TUI", "Consumer Discretionary"),
+    "TW": ("Taylor Wimpey", "Consumer Discretionary"), "ULVR": ("Unilever", "Consumer Staples"),
+    "UU": ("United Utilities", "Utilities"), "VED": ("Vedanta Resources", "Basic Materials"),
+    "VOD": ("Vodafone", "Telecommunications"), "WEIR": ("Weir Group", "Industrials"),
+    "WOS": ("Ferguson (Wolseley)", "Industrials"), "WPP": ("WPP", "Consumer Discretionary"),
+    "WTB": ("Whitbread", "Consumer Discretionary"),
+}
+
+for _t, (_name, _sector) in UK_SHARES.items():
+    INSTRUMENTS[f"{_t}.L"] = {
+        "name": _name, "dukascopy": f"{_t}.GB/GBX", "asset_class": "uk_share", "sector": _sector,
+        "session_tz": "Europe/London", "session_shift": 0,
+        "spread": None,                       # cost modelled in research as 0.1% of price (IG UK share spread bets)
+        "timeframes": ["1d"], "history_start": "2010-01-01",
+    }
 
 # Default Dukascopy bar sizes (each instrument can narrow this with 'timeframes').
 DUKASCOPY_TIMEFRAMES = ALL_TIMEFRAMES

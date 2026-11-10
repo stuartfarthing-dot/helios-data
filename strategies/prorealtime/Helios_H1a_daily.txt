@@ -1,0 +1,67 @@
+// =====================================================================
+// HELIOS H1a - buy the dip in an uptrend            (ProOrder, DAILY chart)
+// Run one copy per market. Only change the two settings below.
+//   ExitRule = 1  -> FTSE 100 (sell at the first close above the middle band, max 20 days)
+//   ExitRule = 2  -> every other market (trailing stop 2 x ATR, max 100 days)
+// Rule fixed and pre-registered 9 Nov 2026 - do not tune.
+// =====================================================================
+DEFPARAM CumulateOrders = False      // one position at a time
+DEFPARAM PreLoadBars = 400           // enough history for the 100-day average
+
+// ---------------- settings ----------------
+ExitRule = 2
+PositionSize = 0.01                  // GBP per point (check the minimum ProRealTime accepts)
+// ------------------------------------------
+
+// Layer 1: long-term trend = slope of the 100-day average / volatility
+ma100 = Average[100](close)
+slope = (ma100 / ma100[20] - 1) * 100
+vol = STD[100](LOG(close / close[1])) * SQRT(20) * 100
+IF vol > 0 THEN
+   score = slope / vol
+ELSE
+   score = 0
+ENDIF
+
+// Layer 4: Bollinger band (20, 2)
+mid = Average[20](close)
+lower = mid - 2 * STD[20](close)
+
+atr = AverageTrueRange[14](close)
+
+setup = score >= 0.15 AND close <= lower
+
+// ---------------- entry ----------------
+IF NOT ONMARKET AND setup THEN
+   riskdist = 2 * atr                // 1R = 2 x ATR at the signal
+   entrybar = BarIndex
+   hh = 0
+   BUY PositionSize PERPOINT AT MARKET      // fills at the next bar's open
+   SET STOP LOSS riskdist                   // hard stop held by IG from the moment of entry
+ENDIF
+
+// ---------------- management ----------------
+IF ONMARKET THEN
+   IF hh = 0 THEN
+      hh = high
+   ELSE
+      hh = MAX(hh, high)
+   ENDIF
+   barsheld = BarIndex - entrybar
+   entryprice = TRADEPRICE(1)
+
+   IF ExitRule = 1 THEN
+      // B: first close above the middle band, or 20 days
+      IF close > mid OR barsheld >= 20 THEN
+         SELL AT MARKET
+      ENDIF
+   ELSE
+      // C2: trailing stop 2 x ATR(at signal) below the highest high since entry, never lowered
+      trail = MAX(entryprice - riskdist, hh - riskdist)
+      IF barsheld >= 100 THEN
+         SELL AT MARKET
+      ELSE
+         SELL AT trail STOP
+      ENDIF
+   ENDIF
+ENDIF
