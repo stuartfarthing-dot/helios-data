@@ -66,6 +66,18 @@ INSTRUMENTS = {
                "asset_class": "crypto", "session_tz": "UTC", "session_shift": 0, "weekends": True,
                "spread": 2.0, "timeframes": DAILY_HOURLY, "history_start": "2016-01-01"},
 
+    # --- round 3 markets (added 11 Nov 2026, H21 selection test) ---
+    # China A50 futures trade 09:00-04:45 Singapore time, so the trading day ends at 05:00 SGT (shift -5).
+    "CHINA50": {"name": "China A50", "dukascopy": "CHI.IDX/USD",
+                "asset_class": "index", "session_tz": "Asia/Singapore", "session_shift": -5,
+                "spread": 10.0, "timeframes": ["1d", "1h"], "history_start": "2012-01-01"},
+    "VIX":     {"name": "Volatility Index", "dukascopy": "VOL.IDX/USD",
+                "asset_class": "index", "session_tz": "America/New_York", "session_shift": 7,
+                "spread": 0.16, "timeframes": ["1d", "1h"], "history_start": "2012-01-01"},
+    "DXY":     {"name": "US Dollar Basket", "dukascopy": "DOLLAR.IDX/USD",
+                "asset_class": "index", "session_tz": "America/New_York", "session_shift": 7,
+                "spread": 0.05, "timeframes": ["1d", "1h"], "history_start": "2012-01-01"},
+
     # --- gold and silver ETFs (added 10 Nov 2026, miners lead/lag study) - NYSE cash session ---
     "GDX":    {"name": "VanEck Gold Miners ETF", "dukascopy": "GDX.US/USD",
                "asset_class": "etf", "session_tz": "America/New_York", "session_shift": 0,
