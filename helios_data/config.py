@@ -78,6 +78,19 @@ INSTRUMENTS = {
                 "asset_class": "index", "session_tz": "America/New_York", "session_shift": 7,
                 "spread": 0.05, "timeframes": ["1d", "1h"], "history_start": "2012-01-01"},
 
+    # --- H21 passes, added to the forward test 11 Nov 2026 ---
+    # Japan and Hong Kong futures trade into the early hours, so their trading day ends at
+    # 07:00 Tokyo (shift -7) and 04:00 Hong Kong (shift -4): the night session joins the day before.
+    "RUT":     {"name": "US Russell 2000", "dukascopy": "USSC2000.IDX/USD",
+                "asset_class": "index", "session_tz": "America/New_York", "session_shift": 7,
+                "spread": 0.3, "timeframes": DAILY_HOURLY, "history_start": "2012-01-01"},
+    "JPN225":  {"name": "Japan 225", "dukascopy": "E_N225Jap",
+                "asset_class": "index", "session_tz": "Asia/Tokyo", "session_shift": -7,
+                "spread": 7.0, "timeframes": DAILY_HOURLY, "history_start": "2012-01-01"},
+    "HK50":    {"name": "Hong Kong HS50", "dukascopy": "E_H-Kong",
+                "asset_class": "index", "session_tz": "Asia/Hong_Kong", "session_shift": -4,
+                "spread": 5.0, "timeframes": DAILY_HOURLY, "history_start": "2012-01-01"},
+
     # --- gold and silver ETFs (added 10 Nov 2026, miners lead/lag study) - NYSE cash session ---
     "GDX":    {"name": "VanEck Gold Miners ETF", "dukascopy": "GDX.US/USD",
                "asset_class": "etf", "session_tz": "America/New_York", "session_shift": 0,

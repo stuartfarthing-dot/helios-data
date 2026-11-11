@@ -155,7 +155,8 @@ CREATE OR REPLACE VIEW live_trades AS
 WITH alert_markets(symbol, alert_exit) AS (VALUES
   ('UK100','B'), ('US500','C2'), ('NAS100','C2'), ('US30','C2'), ('GER40','C2'),
   ('XAUUSD','C2'), ('XAGUSD','C2'), ('COPPER','C2'), ('BRENT','C2'), ('XPTUSD','C2'),
-  ('BTCUSD','C2'), ('ETHUSD','C2')
+  ('BTCUSD','C2'), ('ETHUSD','C2'),
+  ('RUT','C2'), ('JPN225','C2'), ('HK50','C2')   -- added 11 Nov 2026 (H21)
 ), b AS (
   SELECT s.*, lag(s.close) OVER (PARTITION BY s.symbol ORDER BY s.session_date) AS pc
   FROM state_daily s JOIN alert_markets USING (symbol)
