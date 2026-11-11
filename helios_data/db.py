@@ -143,6 +143,24 @@ SELECT a.symbol, a.session_date, a.open, a.high, a.low, a.close, a.trend_state, 
   a.session_date >= DATE '2026-11-10' AS forward_test
 FROM a LEFT JOIN vol_state v USING (symbol, session_date);
 
+-- H18a metals breakout (gold, silver): first close at a 252-session closing high with no such close
+-- in the previous 20 sessions. Buy at the next open, stop 2 x ATR, exit C2. Forward test from 12 Nov 2026.
+CREATE OR REPLACE VIEW h18_signals AS
+WITH d AS (
+  SELECT symbol, session_date, close, high, low, lag(close) OVER w AS pc,
+    close >= max(close) OVER (PARTITION BY symbol ORDER BY session_date ROWS 251 PRECEDING) AS newhigh,
+    count(*) OVER (PARTITION BY symbol ORDER BY session_date ROWS 251 PRECEDING) AS n252
+  FROM daily_session WHERE symbol IN ('XAUUSD', 'XAGUSD') AND high > low
+  WINDOW w AS (PARTITION BY symbol ORDER BY session_date)
+), e AS (
+  SELECT *, sum(newhigh::INT) OVER (PARTITION BY symbol ORDER BY session_date ROWS BETWEEN 20 PRECEDING AND 1 PRECEDING) AS recent,
+    avg(greatest(high - low, abs(high - pc), abs(low - pc))) OVER (PARTITION BY symbol ORDER BY session_date ROWS 13 PRECEDING) AS atr14
+  FROM d
+)
+SELECT symbol, session_date AS signal_date, round(close, 3) AS close, round(atr14, 3) AS atr14,
+  round(2 * atr14, 3) AS stop_distance, session_date >= DATE '2026-11-12' AS forward_test
+FROM e WHERE newhigh AND recent = 0 AND n252 = 252;
+
 CREATE OR REPLACE VIEW market_now AS
 SELECT * FROM h1_signals QUALIFY row_number() OVER (PARTITION BY symbol ORDER BY session_date DESC) = 1;
 

@@ -1,0 +1,54 @@
+// =====================================================================
+// HELIOS H18a - metals breakout                     (ProOrder, DAILY chart)
+// Run one copy per market: Spot Gold (DFB) and Spot Silver (DFB) only.
+// Signal: the first daily close at a 252-session (about 52-week) closing high,
+//         with no such close in the previous 20 sessions.
+// Entry:  buy at the next session's open. Initial stop 2 x ATR(14).
+// Exit:   C2 - trailing stop 2 x ATR (at the signal) below the highest high
+//         since entry, never lowered; or after 100 sessions.
+// Rule fixed and pre-registered 10 Nov 2026 (research H18) - do not tune.
+// This is a separate GBP 0.01 bet from H1a; both can be long gold at once.
+// =====================================================================
+DEFPARAM CumulateOrders = False      // one position at a time
+DEFPARAM PreLoadBars = 400           // enough history for the 252-day high
+
+// ---------------- settings ----------------
+PositionSize = 0.01                  // GBP per point
+// ------------------------------------------
+
+atr = AverageTrueRange[14](close)
+
+newhigh = close >= Highest[252](close)
+// first new high: none of the previous 20 closes was a 252-session high
+IF BarIndex > 272 THEN
+   recent = SUMMATION[20](newhigh[1])
+ELSE
+   recent = 1
+ENDIF
+setup = newhigh AND recent = 0
+
+// ---------------- entry ----------------
+IF NOT ONMARKET AND setup THEN
+   riskdist = 2 * atr                // 1R = 2 x ATR at the signal
+   entrybar = BarIndex
+   hh = 0
+   BUY PositionSize PERPOINT AT MARKET      // fills at the next bar's open
+   SET STOP LOSS riskdist                   // hard stop held by IG from entry
+ENDIF
+
+// ---------------- management (C2) ----------------
+IF ONMARKET THEN
+   IF hh = 0 THEN
+      hh = high
+   ELSE
+      hh = MAX(hh, high)
+   ENDIF
+   barsheld = BarIndex - entrybar
+   entryprice = TRADEPRICE(1)
+   trail = MAX(entryprice - riskdist, hh - riskdist)
+   IF barsheld >= 100 THEN
+      SELL AT MARKET
+   ELSE
+      SELL AT trail STOP
+   ENDIF
+ENDIF
