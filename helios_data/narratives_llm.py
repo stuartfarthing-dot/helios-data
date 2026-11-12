@@ -1,6 +1,6 @@
 """MR-10 method "llm-1.0": a small Claude model reads each headline and assigns narratives.
 
-Runs alongside the rule-based method (rules-1.0); both are stored side by side under their own
+Runs alongside the rule-based method (rules-1.x); both are stored side by side under their own
 method_version, so they can be compared and neither overwrites the other.
 
 For each headline the model returns: relevant (market / economic coverage or not), narratives from the

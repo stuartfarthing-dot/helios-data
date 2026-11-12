@@ -332,7 +332,7 @@ def test_llm_runs_alongside_rules_and_measures(con):
     assert "Fed easing cycle" in md
     n_items = con.execute("SELECT count(*) FROM news.items").fetchone()[0]
     by_mv = dict(con.execute("SELECT method_version, count(*) FROM news.item_class GROUP BY 1").fetchall())
-    assert by_mv == {"rules-1.0": n_items, "llm-1.0": n_items}
+    assert by_mv == {nar.METHOD_VERSION: n_items, "llm-1.0": n_items}
     assert len(call.calls) == -(-n_items // llm.BATCH)
     assert not con.execute("SELECT count(*) FROM news.item_narratives WHERE narrative_id='made_up'").fetchone()[0]
     assert con.execute("SELECT count(*) FROM news.narrative_suggestions").fetchone()[0] == 20   # one Oil story a day, two families
@@ -389,3 +389,10 @@ def test_llm_prompt_handles_missing_excerpts_and_domains():
                           "headline": ["Fed cuts rates", "Gold hits record"], "excerpt": [float("nan"), "Bullion rallies"]})
     text = llm.user_prompt(batch)
     assert text.splitlines() == ["[1] (cnbc.com) Fed cuts rates", "[2] (nyt) Gold hits record — Bullion rallies"]
+
+
+def test_geopolitics_needs_market_context():
+    r = nar.Rules()
+    assert not nar.classify("Troops advance as conflict enters third year", None, r)[1]
+    _, links = nar.classify("Oil jumps as missile attack raises supply fears", None, r)
+    assert "geopolitical_risk" in {l["narrative_id"] for l in links}

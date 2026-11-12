@@ -1,6 +1,6 @@
 """MR-10 narratives: classify stored headlines into market narratives and measure them each day.
 
-Method "rules-1.0" (transparent, no paid services):
+Method "rules-1.1" (transparent, no paid services; 1.0 differed only in the geopolitical_risk rule):
   * A fixed starting set of narratives (NARRATIVES). Each has two or three word groups; a headline
     (plus its permitted summary) belongs to the narrative only if it matches at least one term from
     EVERY group, e.g. Fed easing = {Fed words} AND {cut / easing words}.
@@ -40,12 +40,12 @@ import pandas as pd
 
 log = logging.getLogger("narratives")
 
-METHOD_VERSION = "rules-1.0"
+METHOD_VERSION = "rules-1.1"   # 1.1 (12 Nov 2026): geopolitical_risk needs market context. rules-1.0 rows are kept.
 MIN_STORIES = 5            # a family needs this many relevant stories on a day to count
 ACTIVE_PREV = 0.02         # prevalence threshold for "active"
 CORE_FAMILIES = ("guardian", "nyt")
 
-# ---------------------------------------------------------------- taxonomy (method rules-1.0)
+# ---------------------------------------------------------------- taxonomy (method rules-1.1)
 
 FED = ["fed", "federal reserve", "fomc", "us central bank", "fed chair", "fed's"]
 BOE = ["bank of england", "boe", "monetary policy committee", "threadneedle street"]
@@ -182,8 +182,13 @@ NARRATIVES = [
     dict(id="geopolitical_risk", title="Geopolitical risk",
          description="War, conflict, sanctions and security shocks in market coverage.",
          countries="global", assets="oil,gold,equities",
+         # rules-1.1: a second group requires market / economic context. In 1.0 general war reporting
+         # (NYT World desk) matched on its own and gave this narrative 20-29% prevalence.
          groups=[["war", "conflict", "sanction*", "missile*", "invasion", "ceasefire", "military", "attack*",
-                  "geopolitic*", "strikes on", "airstrike*", "troops", "nuclear"]]),
+                  "geopolitic*", "strikes on", "airstrike*", "troops", "nuclear"],
+                 ["market*", "stock*", "shares", "investor*", "oil", "crude", "brent", "gas price*", "gold",
+                  "bond*", "yield*", "dollar", "currenc*", "econom*", "inflation", "prices", "supply chain*",
+                  "shipping", "trade", "exports", "imports", "energy", "commodit*", "safe haven", "risk"]]),
 ]
 
 # Broad vocabulary that makes a headline "relevant" market / economic coverage (the denominator).

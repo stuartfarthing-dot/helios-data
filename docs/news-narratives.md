@@ -41,7 +41,9 @@ A missing GDELT file, a failed feed or a missing key is written to `news.collect
 | `narrative_daily_latest` (view) | Latest computation of each day |
 | `narrative_now` (view) | Latest observation of every narrative, for the Macro Pressure Map |
 
-## Method `rules-1.0`
+## Method `rules-1.1`
+
+`rules-1.0` (12 Nov 2026) is identical except for one rule. In 1.0, *geopolitical risk* matched any war or conflict word, so general world news gave it 20–29% prevalence in the NYT backfill. In 1.1 it also needs a market or economic word (oil, markets, investors, prices…). The `rules-1.0` rows are kept for reference.
 
 **Assigning headlines to narratives:**
 - Each narrative is defined by two or three word groups. A headline belongs to the narrative only if it matches a term from every group. For example, *Fed easing* = {Fed words} AND {cut / easing words}.
