@@ -382,3 +382,10 @@ def test_late_data_triggers_a_new_measurement_not_an_overwrite(con):
     vals = con.execute("""SELECT prevalence FROM news.narrative_daily WHERE narrative_id='fed_easing'
                           AND obs_date=? ORDER BY computed_utc""", [day]).fetchall()
     assert len(vals) == 2 and vals[1][0] > vals[0][0]
+
+
+def test_llm_prompt_handles_missing_excerpts_and_domains():
+    batch = pd.DataFrame({"item_id": ["a", "b"], "source_id": ["gdelt", "nyt"], "domain": ["cnbc.com", float("nan")],
+                          "headline": ["Fed cuts rates", "Gold hits record"], "excerpt": [float("nan"), "Bullion rallies"]})
+    text = llm.user_prompt(batch)
+    assert text.splitlines() == ["[1] (cnbc.com) Fed cuts rates", "[2] (nyt) Gold hits record — Bullion rallies"]

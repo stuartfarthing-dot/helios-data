@@ -92,13 +92,18 @@ Confidence: high = the item is plainly about the narrative; medium = it supports
 An item may have several narratives or none. Reply with a JSON array only, one object per item, no prose."""
 
 
+def _s(x) -> str:
+    """Missing values come back from the warehouse as None or NaN; treat both as empty text."""
+    return x if isinstance(x, str) else ""
+
+
 def user_prompt(batch: pd.DataFrame) -> str:
     out = []
     for k, r in enumerate(batch.itertuples(index=False), 1):
-        src = nar.SOURCE_CONTEXT.get(r.source_id) or r.domain or r.source_id
-        text = r.headline or ""
-        if r.excerpt:
-            text += f" — {r.excerpt[:300]}"
+        src = nar.SOURCE_CONTEXT.get(r.source_id) or _s(r.domain) or r.source_id
+        text = _s(r.headline)
+        if _s(r.excerpt):
+            text += f" — {_s(r.excerpt)[:300]}"
         out.append(f"[{k}] ({src}) {text}")
     return "\n".join(out)
 
@@ -214,7 +219,7 @@ def classify_new(con, now: datetime, key: str, max_items: int = 3000, budget_usd
             for k, r in enumerate(batch.itertuples(index=False), 1):
                 if k not in answers:
                     continue                                 # left for the next run
-                t, ls, sug = validate(answers[k], r.headline, r.excerpt)
+                t, ls, sug = validate(answers[k], _s(r.headline), _s(r.excerpt))
                 tags.append({"item_id": r.item_id, "method_version": METHOD_VERSION, "processed_utc": now, **t})
                 links += [{"item_id": r.item_id, **l, "method_version": METHOD_VERSION, "processed_utc": now} for l in ls]
                 if sug:

@@ -382,7 +382,8 @@ def classify_new(con, now: datetime, batch: int = 50000) -> int:
             return total
         tags, links = [], []
         for r in df.itertuples(index=False):
-            t, ls = classify(r.headline, r.excerpt, rules, SOURCE_CONTEXT.get(r.source_id))
+            t, ls = classify(r.headline if isinstance(r.headline, str) else "",
+                             r.excerpt if isinstance(r.excerpt, str) else None, rules, SOURCE_CONTEXT.get(r.source_id))
             tags.append({"item_id": r.item_id, "method_version": METHOD_VERSION, "processed_utc": now, **t})
             links += [{"item_id": r.item_id, **l, "method_version": METHOD_VERSION, "processed_utc": now} for l in ls]
         tdf = pd.DataFrame(tags)
