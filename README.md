@@ -31,7 +31,7 @@ SELECT ts, close FROM daily WHERE symbol = 'UK100' AND ts >= '2020-01-01' ORDER 
 
 ## News narratives (MR-10)
 
-Headlines from central-bank feeds, GDELT, the Guardian and the NYT are collected every 4 hours into the `news` schema. They are classified into market narratives, and each completed day is measured: prevalence, momentum, persistence, sentiment and intensity. This is descriptive only, with no trading signals. Workflow: *Update news narratives*. Secrets: `GUARDIAN_KEY`, `NYT_KEY`, optional `FINNHUB_KEY`. Method and table definitions: [docs/news-narratives.md](docs/news-narratives.md).
+Headlines from central-bank feeds, GDELT, the Guardian and the NYT are collected every 4 hours into the `news` schema. They are classified into market narratives, and each completed day is measured: prevalence, momentum, persistence, sentiment and intensity. This is descriptive only, with no trading signals. Workflow: *Update news narratives*. Secrets: `GUARDIAN_KEY`, `NYT_KEY`, optional `FINNHUB_KEY`, and `ANTHROPIC_API_KEY` for the Claude classification method (`llm-1.0`), which runs alongside the rules (capped at $10 a month). Method and table definitions: [docs/news-narratives.md](docs/news-narratives.md).
 
 ## Setup (once)
 

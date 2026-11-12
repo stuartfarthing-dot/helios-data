@@ -350,17 +350,21 @@ WHERE d.obs_date = (SELECT max(obs_date) FROM news.narrative_daily WHERE method_
 """
 
 
-def init(con, now: datetime) -> None:
-    con.execute(SCHEMA)
-    if not con.execute("SELECT count(*) FROM news.methods WHERE method_version = ?", [METHOD_VERSION]).fetchone()[0]:
-        con.execute("INSERT INTO news.methods VALUES (?,?,?,?)",
-                    [METHOD_VERSION, now, rules_json(), "rule-based phrase groups; see narratives.py docstring"])
+def register_method(con, now: datetime, mv: str, definition: str, notes: str) -> None:
+    """Record a method version (once) and give it its own copy of the narrative list."""
+    if not con.execute("SELECT count(*) FROM news.methods WHERE method_version = ?", [mv]).fetchone()[0]:
+        con.execute("INSERT INTO news.methods VALUES (?,?,?,?)", [mv, now, definition, notes])
     for n in NARRATIVES:
         exists = con.execute("SELECT count(*) FROM news.narratives WHERE narrative_id=? AND method_version=?",
-                             [n["id"], METHOD_VERSION]).fetchone()[0]
+                             [n["id"], mv]).fetchone()[0]
         if not exists:
             con.execute("INSERT INTO news.narratives VALUES (?,?,?,?,?,?,NULL,'new',NULL,?)",
-                        [n["id"], n["title"], n["description"], n["countries"], n["assets"], METHOD_VERSION, now])
+                        [n["id"], n["title"], n["description"], n["countries"], n["assets"], mv, now])
+
+
+def init(con, now: datetime) -> None:
+    con.execute(SCHEMA)
+    register_method(con, now, METHOD_VERSION, rules_json(), "rule-based phrase groups; see narratives.py docstring")
 
 
 # ---------------------------------------------------------------- classification
@@ -484,8 +488,8 @@ FROM fam
 """
 
 
-def _params(as_of: datetime) -> dict:
-    return {"mv": METHOD_VERSION, "as_of": as_of, "min_stories": MIN_STORIES, "active": ACTIVE_PREV,
+def _params(as_of: datetime, mv: str = METHOD_VERSION) -> dict:
+    return {"mv": mv, "as_of": as_of, "min_stories": MIN_STORIES, "active": ACTIVE_PREV,
             "core": list(CORE_FAMILIES)}
 
 
@@ -493,12 +497,12 @@ def _sql(body: str, core_list: str) -> str:
     return body.replace("IN $core", f"IN {core_list}")
 
 
-def compute_days(con, as_of: datetime, days: list[date]) -> int:
+def compute_days(con, as_of: datetime, days: list[date], mv: str = METHOD_VERSION) -> int:
     """Measure the given days from everything known at as_of; append rows (never update)."""
     if not days:
         return 0
     core = "(" + ",".join(f"'{f}'" for f in CORE_FAMILIES) + ")"
-    params = {k: v for k, v in _params(as_of).items() if k != "core"}
+    params = {k: v for k, v in _params(as_of, mv).items() if k != "core"}
     con.register("target_days", pd.DataFrame({"d": pd.to_datetime(days).date}))
     main_sql = _sql(MEASURES_SQL, core)
     con.execute(f"""INSERT INTO news.narrative_daily
@@ -508,23 +512,27 @@ def compute_days(con, as_of: datetime, days: list[date]) -> int:
                     SELECT f.* FROM ({fam_sql}) f WHERE f.obs_date IN (SELECT d FROM target_days)""",
                 {k: v for k, v in params.items() if k != "active"})
     n = con.execute("SELECT count(*) FROM news.narrative_daily WHERE computed_utc = ? AND method_version = ?",
-                    [as_of, METHOD_VERSION]).fetchone()[0]
+                    [as_of, mv]).fetchone()[0]
     con.unregister("target_days")
     return n
 
 
-def pending_days(con, now: datetime) -> list[date]:
-    """Completed UTC days (ended at least 6 hours ago) with items but no measurement yet for this method."""
+def pending_days(con, now: datetime, mv: str = METHOD_VERSION, min_classified: float = 0.99) -> list[date]:
+    """Completed UTC days (ended at least 6 hours ago) with items, not yet measured for this method, and with
+    at least 99% of their items classified by it (so a backlog never produces a partial measurement)."""
     last_complete = (now - timedelta(hours=30)).date()
     rows = con.execute("""
-        SELECT DISTINCT CAST(published_utc AS DATE) AS d FROM news.items
-        WHERE published_utc IS NOT NULL AND CAST(published_utc AS DATE) <= ? AND family <> 'event'
-          AND CAST(published_utc AS DATE) NOT IN (SELECT obs_date FROM news.narrative_daily WHERE method_version = ?)
-        ORDER BY d""", [last_complete, METHOD_VERSION]).fetchall()
+        SELECT d FROM (
+          SELECT CAST(i.published_utc AS DATE) AS d, count(*) AS n, count(c.item_id) AS k
+          FROM news.items i LEFT JOIN news.item_class c ON c.item_id = i.item_id AND c.method_version = ?
+          WHERE i.published_utc IS NOT NULL AND i.family <> 'event' GROUP BY 1)
+        WHERE d <= ? AND k >= ? * n
+          AND d NOT IN (SELECT obs_date FROM news.narrative_daily WHERE method_version = ?)
+        ORDER BY d""", [mv, last_complete, min_classified, mv]).fetchall()
     return [r[0] for r in rows]
 
 
-def update_narratives(con, now: datetime) -> None:
+def update_narratives(con, now: datetime, mv: str = METHOD_VERSION) -> None:
     """Refresh first-detected date and current status (history stays in narrative_daily)."""
     con.execute("""
         UPDATE news.narratives n SET
@@ -536,7 +544,7 @@ def update_narratives(con, now: datetime) -> None:
           LEFT JOIN (SELECT narrative_id, min(obs_date) AS first_active FROM news.narrative_daily_latest
                      WHERE method_version = $mv AND persistence > 0 GROUP BY 1) f USING (narrative_id)
         ) s
-        WHERE n.narrative_id = s.narrative_id AND n.method_version = $mv""", {"now": now, "mv": METHOD_VERSION})
+        WHERE n.narrative_id = s.narrative_id AND n.method_version = $mv""", {"now": now, "mv": mv})
 
 
 # ---------------------------------------------------------------- daily report
@@ -556,8 +564,7 @@ def _sent(s, a):
     return f"{word} ({s:+.2f}){' on ' + a if a else ''}"
 
 
-def build_report(con, report_date: date | None = None) -> str:
-    mv = METHOD_VERSION
+def build_report(con, report_date: date | None = None, mv: str = METHOD_VERSION) -> str:
     if report_date is None:
         report_date = con.execute("SELECT max(obs_date) FROM news.narrative_daily WHERE method_version=?", [mv]).fetchone()[0]
     if report_date is None:
@@ -618,8 +625,8 @@ def build_report(con, report_date: date | None = None) -> str:
     return "\n".join(out)
 
 
-def save_report(con, md: str, report_date: date, now: datetime) -> None:
-    con.execute("INSERT INTO news.daily_report VALUES (?,?,?,?)", [report_date, METHOD_VERSION, now, md])
+def save_report(con, md: str, report_date: date, now: datetime, mv: str = METHOD_VERSION) -> None:
+    con.execute("INSERT INTO news.daily_report VALUES (?,?,?,?)", [report_date, mv, now, md])
 
 
 # ---------------------------------------------------------------- entry point

@@ -25,6 +25,10 @@ on:
         description: "Normal run: only these sources (space separated: official gdelt guardian nyt finnhub ust; blank = all)"
         required: false
         default: ""
+      llm_items:
+        description: "Max headlines for Claude to classify this run (blank = 3000; raise for the backfill)"
+        required: false
+        default: ""
 
 concurrency:
   group: update-news
@@ -39,6 +43,8 @@ jobs:
       GUARDIAN_KEY: ${{ secrets.GUARDIAN_KEY }}
       NYT_KEY: ${{ secrets.NYT_KEY }}
       FINNHUB_KEY: ${{ secrets.FINNHUB_KEY }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      LLM_MONTHLY_USD: "10"
     steps:
       - uses: actions/checkout@v4
 
@@ -65,10 +71,18 @@ jobs:
           fi
           python -m helios_data.news_ingest $ARGS
 
-      - name: Classify and measure narratives
+      - name: Classify and measure narratives (rules-1.0)
         run: python -m helios_data.narratives | tee report.md
+
+      - name: Classify and measure narratives with Claude (llm-1.0)
+        continue-on-error: true
+        run: |
+          ARGS=""
+          if [ -n "${{ inputs.llm_items }}" ]; then ARGS="--max-items ${{ inputs.llm_items }}"; fi
+          python -m helios_data.narratives_llm $ARGS | tee report_llm.md
 
       - name: Report in job summary
         if: always()
         run: |
           if [ -f report.md ]; then cat report.md >> "$GITHUB_STEP_SUMMARY"; fi
+          if [ -s report_llm.md ]; then printf "\n---\n## Claude method (llm-1.0)\n" >> "$GITHUB_STEP_SUMMARY"; cat report_llm.md >> "$GITHUB_STEP_SUMMARY"; fi

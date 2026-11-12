@@ -281,3 +281,87 @@ def test_official_feeds_get_their_institution_as_context():
     tags, links = nar.classify("Federal Reserve Board announces approval of application by Peoples Bancorp Inc.",
                                None, r, nar.SOURCE_CONTEXT["fed_press"])
     assert not links and not tags["relevant"]              # supervisory notices are not market coverage
+
+
+# ---------------------------------------------------------------- llm-1.0 (Claude replaced by a fake)
+
+from helios_data import narratives_llm as llm   # noqa: E402
+
+
+def fake_claude(answer_fn):
+    calls = []
+
+    def call(system, user, key, max_tokens=6000):
+        calls.append(user)
+        items = [line for line in user.splitlines() if line.startswith("[")]
+        out = [answer_fn(i + 1, line) for i, line in enumerate(items)]
+        return {"content": [{"type": "text", "text": "Here you go:\n" + __import__("json").dumps([o for o in out if o])}],
+                "usage": {"input_tokens": 2000, "output_tokens": 800, "cache_read_input_tokens": 1500}}
+    call.calls = calls
+    return call
+
+
+def label(n, line):
+    if "Fed" in line:
+        return {"n": n, "relevant": True, "asset": "rates", "direction": 1, "intense": False, "suggest": None,
+                "narratives": [{"id": "fed_easing", "confidence": "high", "evidence": "rate cuts"},
+                               {"id": "made_up", "confidence": "high", "evidence": "x"}]}
+    if "Oil" in line:
+        return {"n": n, "relevant": True, "asset": "oil", "direction": -1, "intense": False,
+                "narratives": [], "suggest": "OPEC supply glut"}
+    return {"n": n, "relevant": True, "asset": "equities", "direction": 0, "intense": False, "narratives": []}
+
+
+def test_llm_validation_rules():
+    tags, links, sug = llm.validate({"relevant": True, "direction": 5, "asset": "bananas", "narratives": [
+        {"id": "gold_haven_debasement", "confidence": "high", "evidence": "Gold soars"},
+        {"id": "dollar_weakness", "confidence": "high", "evidence": "dollar collapses"}]},
+        "Gold soars to a record", None)
+    conf = {l["narrative_id"]: l["confidence"] for l in links}
+    assert conf == {"gold_haven_debasement": "high", "dollar_weakness": "low"}   # evidence not in the text
+    assert tags["sentiment"] == 0.0 and tags["assets"] is None                  # invalid values neutralised
+    assert sug is None
+
+
+def test_llm_runs_alongside_rules_and_measures(con):
+    make_history(con, date(2026, 11, 1), 10, fed_from=0)
+    nar.run(con, now=NOW)
+    call = fake_claude(label)
+    md = llm.run(con, now=NOW, key="k", call=call)
+    assert "Fed easing cycle" in md
+    n_items = con.execute("SELECT count(*) FROM news.items").fetchone()[0]
+    by_mv = dict(con.execute("SELECT method_version, count(*) FROM news.item_class GROUP BY 1").fetchall())
+    assert by_mv == {"rules-1.0": n_items, "llm-1.0": n_items}
+    assert len(call.calls) == -(-n_items // llm.BATCH)
+    assert not con.execute("SELECT count(*) FROM news.item_narratives WHERE narrative_id='made_up'").fetchone()[0]
+    assert con.execute("SELECT count(*) FROM news.narrative_suggestions").fetchone()[0] == 20   # one Oil story a day, two families
+    calls = con.execute("SELECT count(*), sum(cost_usd) FROM news.llm_calls").fetchone()
+    assert calls[1] == pytest.approx(calls[0] * (2000 * 0.10 + 800 * 0.50 + 1500 * 0.01) / 1e6)
+    p = con.execute("""SELECT prevalence FROM news.narrative_daily_latest WHERE method_version='llm-1.0'
+                       AND narrative_id='fed_easing' ORDER BY obs_date DESC LIMIT 1""").fetchone()[0]
+    assert p == pytest.approx(0.1)
+    # nothing is asked twice
+    llm.run(con, now=NOW + timedelta(hours=4), key="k", call=call)
+    assert len(call.calls) == -(-n_items // llm.BATCH)
+
+
+def test_llm_budget_and_partial_answers(con):
+    make_history(con, date(2026, 11, 1), 10, fed_from=0)
+    # the model skips every 5th item: those stay unclassified and the days are not measured from a partial set
+    skip = fake_claude(lambda n, line: None if n % 5 == 0 else label(n, line))
+    llm.run(con, now=NOW, key="k", call=skip)
+    left = con.execute("""SELECT count(*) FROM news.items i WHERE NOT EXISTS (SELECT 1 FROM news.item_class c
+                          WHERE c.item_id=i.item_id AND c.method_version='llm-1.0')""").fetchone()[0]
+    assert left > 0
+    assert not con.execute("SELECT count(*) FROM news.narrative_daily WHERE method_version='llm-1.0'").fetchone()[0]
+    # budget reached: no further calls this month
+    con.execute("UPDATE news.llm_calls SET cost_usd = 50")
+    n_before = len(skip.calls)
+    stats = llm.classify_new(con, NOW, "k", call=skip)
+    assert stats["skipped_budget"] and len(skip.calls) == n_before
+
+
+def test_llm_skipped_without_key(con, monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    assert llm.run(con, now=NOW) is None
+    assert con.execute("SELECT count(*) FROM news.methods WHERE method_version='llm-1.0'").fetchone()[0] == 1

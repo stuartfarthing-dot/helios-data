@@ -74,6 +74,30 @@ A missing GDELT file, a failed feed or a missing key is written to `news.collect
 | confidence | High: 10 or more stories from 2 or more families. Medium: 4 or more stories. Otherwise low |
 | status | dormant (not active); emerging (momentum ≥ +50%); fading (momentum ≤ −30%); otherwise active |
 
+## Method `llm-1.0` (Claude Haiku, alongside the rules)
+
+`helios_data/narratives_llm.py` sends headlines to Claude Haiku (`claude-haiku-5-5`) in batches of 40, with thinking off and effort set to low. The narrative list and the instructions are recorded in `news.methods`.
+
+**What the model returns for each item:**
+- whether it is relevant market or economic coverage;
+- narratives from the fixed list, each with a confidence and an evidence phrase copied from the text;
+- the asset class it is mostly about, and the direction its wording implies for that asset (−1, 0 or +1). This is stored as `sentiment`;
+- whether the language is dramatic (stored as `intensity`);
+- for relevant items that fit no narrative, a suggested theme name. Suggestions go into `news.narrative_suggestions` for review and are never added automatically.
+
+**Safeguards:**
+- **Evidence check:** an evidence phrase not found in the item downgrades the link to low, so it doesn't count towards prevalence.
+- **Unknown narratives:** ids not on the list are dropped.
+- **Gaps:** items the model skipped stay unclassified and are retried on the next run.
+- **No partial days:** a day is measured only when 99% of its items are classified.
+- **Fixed answers:** answers are stored once and never re-asked.
+- **Cost logging:** every call is logged in `news.llm_calls`, with tokens and cost.
+- **Spend limits:** `LLM_MONTHLY_USD` (default $10) stops calls for the month, and `LLM_MAX_ITEMS` (default 3,000) caps each run.
+
+The measures, report and views are identical for both methods; filter on `method_version`. Without `ANTHROPIC_API_KEY` this step is skipped.
+
+**Validation in progress:** compare the two methods' links and daily prevalence, and hand-check a sample where they disagree.
+
 ## Avoiding look-ahead and keeping history
 
 - **Point in time:** each observation is computed from items with `collected_utc` ≤ its `computed_utc`. Passing an old `computed_utc` as `as_of` reproduces that row exactly (tested).
@@ -88,7 +112,8 @@ python -m helios_data.news_ingest                            # normal collection
 python -m helios_data.news_ingest --backfill guardian --start 2015-01-01
 python -m helios_data.news_ingest --backfill nyt --start 2015-01-01
 python -m helios_data.news_ingest --backfill ust --start 2015-01-01
-python -m helios_data.narratives                             # classify, measure completed days, print report
+python -m helios_data.narratives                             # rules: classify, measure completed days, print report
+python -m helios_data.narratives_llm [--max-items 20000]     # Claude method, the same steps
 python -m helios_data.narratives --report 2026-11-13         # print a stored day's report
 ```
 
