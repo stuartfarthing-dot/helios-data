@@ -29,6 +29,10 @@ Example query:
 SELECT ts, close FROM daily WHERE symbol = 'UK100' AND ts >= '2020-01-01' ORDER BY ts;
 ```
 
+## News narratives (MR-10)
+
+Headlines from central-bank feeds, GDELT, the Guardian and the NYT are collected every 4 hours into the `news` schema. They are classified into market narratives, and each completed day is measured: prevalence, momentum, persistence, sentiment and intensity. This is descriptive only, with no trading signals. Workflow: *Update news narratives*. Secrets: `GUARDIAN_KEY`, `NYT_KEY`, optional `FINNHUB_KEY`. Method and table definitions: [docs/news-narratives.md](docs/news-narratives.md).
+
 ## Setup (once)
 
 1. **MotherDuck:** sign up at motherduck.com (free Lite plan). Go to Settings → Access tokens → create a token and copy it.
@@ -54,6 +58,7 @@ Tools:
 - `python -m helios_data.dukascopy_ingest [--symbols UK100] [--timeframes 1d] [--start 2024-01-01]`
 - `python -m helios_data.ig_ingest [--find "Spot Gold"]`
 - `python -m helios_data.status`
+- `python -m helios_data.news_ingest` and `python -m helios_data.narratives`: news collection and daily narrative measures
 - `python -m pytest`: offline tests using fake data
 
 ## Notes
