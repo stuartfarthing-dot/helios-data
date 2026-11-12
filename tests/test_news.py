@@ -63,6 +63,7 @@ def test_parse_rss_and_atom():
 def test_parse_gkg_filters_outlets_themes_and_type():
     raw = "\n".join([
         gkg_line("reuters.com", "https://reuters.com/a", "Inflation picks up in October - Reuters"),
+        gkg_line("bbc.co.uk", "https://bbc.co.uk/x", "Eight dead in building collapse"),            # no market words
         gkg_line("randomblog.net", "https://randomblog.net/a", "Inflation picks up"),            # not whitelisted
         gkg_line("cnbc.com", "https://cnbc.com/b", "Celebrity news", themes="TAX_FNCACT_ACTOR"),  # no econ theme
         gkg_line("cnbc.com", "https://cnbc.com/c", "Fed cut", kind="2"),                          # not a web page
@@ -365,3 +366,19 @@ def test_llm_skipped_without_key(con, monkeypatch):
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     assert llm.run(con, now=NOW) is None
     assert con.execute("SELECT count(*) FROM news.methods WHERE method_version='llm-1.0'").fetchone()[0] == 1
+
+
+def test_late_data_triggers_a_new_measurement_not_an_overwrite(con):
+    day = date(2026, 11, 3)
+    make_history(con, date(2026, 11, 1), 5, fed_from=0)
+    nar.run(con, now=datetime(2026, 11, 8, 12, 0))
+    assert nar.pending_days(con, datetime(2026, 11, 8, 13, 0)) == []
+    # a backfill adds items for 3 Nov two days later
+    seed(con, day, "guardian", [f"Fed set to cut rates as easing bets grow {i}" for i in range(5)],
+         collected=datetime(2026, 11, 10, 9, 0), backfill=True)
+    nar.classify_new(con, datetime(2026, 11, 10, 9, 0))
+    assert nar.pending_days(con, datetime(2026, 11, 10, 10, 0)) == [day]
+    nar.run(con, now=datetime(2026, 11, 10, 10, 0))
+    vals = con.execute("""SELECT prevalence FROM news.narrative_daily WHERE narrative_id='fed_easing'
+                          AND obs_date=? ORDER BY computed_utc""", [day]).fetchall()
+    assert len(vals) == 2 and vals[1][0] > vals[0][0]

@@ -43,7 +43,7 @@ import requests
 
 log = logging.getLogger("news")
 
-COLLECTOR_VERSION = "news-1.0"
+COLLECTOR_VERSION = "news-1.1"   # 1.1 (13 Nov 2026): tighter GDELT filter
 UA = {"User-Agent": "helios-data/1.0 (personal market research; github.com/stuartfarthing-dot/helios-data)"}
 
 SCHEMA = """
@@ -130,10 +130,21 @@ GDELT_DOMAINS = {
     "economictimes.indiatimes.com", "straitstimes.com", "channelnewsasia.com", "france24.com", "cnn.com",
     "foxbusiness.com", "investopedia.com", "spglobal.com", "mining.com", "oilprice.com",
 }
-# GKG themes that mark a page as economic / market coverage (prefix match).
+# GKG themes that mark a page as economic / market coverage (prefix match). Broad themes such as EPU_* and
+# TAX_FNCACT_ECONOMIST were dropped in news-1.1: they tag a lot of general news.
 GDELT_THEME_PREFIXES = ("ECON_", "WB_1104_MACROECONOMIC", "WB_442_INFLATION", "WB_1235_CENTRAL_BANKS",
-                        "WB_318_FINANCIAL_ARCHITECTURE", "WB_1920_FINANCIAL_SECTOR", "WB_2745_JOB_QUALITY",
-                        "TAX_FNCACT_ECONOMIST", "WB_332_CAPITAL_MARKETS", "WB_450_DEBT", "EPU_")
+                        "WB_318_FINANCIAL_ARCHITECTURE", "WB_1920_FINANCIAL_SECTOR", "WB_332_CAPITAL_MARKETS",
+                        "WB_450_DEBT")
+_RELEVANT_RX = None
+
+
+def _relevant_title(title: str) -> bool:
+    """GDELT pages must also have market / economic words in the title (the narratives RELEVANT list)."""
+    global _RELEVANT_RX
+    if _RELEVANT_RX is None:
+        from .narratives import RELEVANT, _rx
+        _RELEVANT_RX = _rx(RELEVANT)
+    return bool(_RELEVANT_RX.search(title))
 
 NYT_SECTIONS = {"Business Day", "Business", "Economy", "Your Money", "DealBook", "World", "Markets"}
 
@@ -340,7 +351,7 @@ def parse_gkg(raw: bytes, domains=GDELT_DOMAINS) -> list[dict]:
             continue
         m = _TITLE.search(f[26])
         title = html.unescape(m.group(1)).strip() if m else ""
-        if not title:
+        if not title or not _relevant_title(title):
             continue
         try:
             tone = float(f[15].split(",")[0])
@@ -605,7 +616,7 @@ def run_live(con, sources=None, now=None) -> Ctx:
         elif s == "finnhub":
             collect_finnhub(ctx)
         elif s == "ust":
-            collect_ust(ctx, today - timedelta(days=10))
+            collect_ust(ctx, today - timedelta(days=45))   # Fiscal Data posts results a week or two late
     return ctx
 
 

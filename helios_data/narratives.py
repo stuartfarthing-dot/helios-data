@@ -518,17 +518,22 @@ def compute_days(con, as_of: datetime, days: list[date], mv: str = METHOD_VERSIO
 
 
 def pending_days(con, now: datetime, mv: str = METHOD_VERSION, min_classified: float = 0.99) -> list[date]:
-    """Completed UTC days (ended at least 6 hours ago) with items, not yet measured for this method, and with
-    at least 99% of their items classified by it (so a backlog never produces a partial measurement)."""
+    """Completed UTC days (ended at least 6 hours ago) that need a (new) measurement for this method:
+    never measured, or new items for that day were collected after its last measurement (late items,
+    a backfill). The earlier measurement is kept; a new row is appended. A day is only measured once at
+    least 99% of its items are classified by the method, so a backlog never gives a partial measurement."""
     last_complete = (now - timedelta(hours=30)).date()
     rows = con.execute("""
-        SELECT d FROM (
-          SELECT CAST(i.published_utc AS DATE) AS d, count(*) AS n, count(c.item_id) AS k
+        WITH d AS (
+          SELECT CAST(i.published_utc AS DATE) AS d, count(*) AS n, count(c.item_id) AS k,
+                 max(i.collected_utc) AS last_collected
           FROM news.items i LEFT JOIN news.item_class c ON c.item_id = i.item_id AND c.method_version = ?
-          WHERE i.published_utc IS NOT NULL AND i.family <> 'event' GROUP BY 1)
-        WHERE d <= ? AND k >= ? * n
-          AND d NOT IN (SELECT obs_date FROM news.narrative_daily WHERE method_version = ?)
-        ORDER BY d""", [mv, last_complete, min_classified, mv]).fetchall()
+          WHERE i.published_utc IS NOT NULL AND i.family <> 'event' GROUP BY 1),
+        m AS (SELECT obs_date, max(computed_utc) AS last_computed FROM news.narrative_daily
+              WHERE method_version = ? GROUP BY 1)
+        SELECT d.d FROM d LEFT JOIN m ON m.obs_date = d.d
+        WHERE d.d <= ? AND d.k >= ? * d.n AND (m.obs_date IS NULL OR d.last_collected > m.last_computed)
+        ORDER BY d.d""", [mv, mv, last_complete, min_classified]).fetchall()
     return [r[0] for r in rows]
 
 
