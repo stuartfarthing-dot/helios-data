@@ -44,7 +44,7 @@ jobs:
       NYT_KEY: ${{ secrets.NYT_KEY }}
       FINNHUB_KEY: ${{ secrets.FINNHUB_KEY }}
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-      LLM_MONTHLY_USD: "10"
+      LLM_MONTHLY_USD: "4"   # $5 of prepaid credit loaded 12 Nov 2026; raise when more is added
     steps:
       - uses: actions/checkout@v4
 
