@@ -3,7 +3,16 @@
 // Run one copy per market. Only change the two settings below.
 //   ExitRule = 1  -> FTSE 100 (sell at the first close above the middle band, max 20 days)
 //   ExitRule = 2  -> every other market (trailing stop 2 x ATR, max 100 days)
+//   ExitRule = 3  -> "+1R slice" only (limit at entry + 2 x ATR, max 100 days)   (added 13 Nov 2026)
 // Rule fixed and pre-registered 9 Nov 2026 - do not tune.
+//
+// Staggered exits (research H28, 13 Nov 2026). ProOrder cannot partly close a position with a
+// stop or limit order, so each slice runs as its own copy of this system at 0.01, same entry:
+//   H1a-S2 ("half and half")  = a B slice + a C2 slice in every H1a market
+//   H1a-S3 ("thirds")         = + a +1R slice (ExitRule 3), not on Japan 225, Wall Street, US Tech 100
+// The existing 0.01 H1a systems ARE one slice already (C2, or B on FTSE), so only the missing
+// slices are added: "H1a-B" (ExitRule 1) on the 12 non-FTSE markets, "H1a-C2" (ExitRule 2) on FTSE,
+// and "H1a-T1" (ExitRule 3) on the 10 markets above.
 // =====================================================================
 DEFPARAM CumulateOrders = False      // one position at a time
 DEFPARAM PreLoadBars = 400           // enough history for the 100-day average
@@ -50,7 +59,14 @@ IF ONMARKET THEN
    barsheld = BarIndex - entrybar
    entryprice = TRADEPRICE(1)
 
-   IF ExitRule = 1 THEN
+   IF ExitRule = 3 THEN
+      // +1R slice: limit at entry + 1R, or 100 days
+      IF barsheld >= 100 THEN
+         SELL AT MARKET
+      ELSE
+         SELL AT entryprice + riskdist LIMIT
+      ENDIF
+   ELSIF ExitRule = 1 THEN
       // B: first close above the middle band, or 20 days
       IF close > mid OR barsheld >= 20 THEN
          SELL AT MARKET
