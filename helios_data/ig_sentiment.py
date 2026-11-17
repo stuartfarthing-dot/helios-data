@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import time
 from datetime import datetime, timezone
 
 import pandas as pd
@@ -26,6 +27,23 @@ MARKETS = {
     "COPPER": "Copper", "BRENT": "Brent Crude", "BTCUSD": "Bitcoin", "ETHUSD": "Ether",
 }
 KNOWN_EPICS = {"UK100": "IX.D.FTSE.DAILY.IP", "XAUUSD": "CS.D.USCGC.TODAY.IP", "BTCUSD": "CS.D.BITCOIN.TODAY.IP"}
+
+# IG limits non-trading API requests per minute. This step makes two calls per market (search and market
+# details), so it runs straight after the price and trade downloads and was hitting the per-minute limit
+# (403 exceeded-api-key-allowance from 13 Nov 2026). Pace the calls, and wait out the minute once if IG refuses.
+PAUSE_SECONDS = 2.5
+
+
+def _paced(fn, *args, **kwargs):
+    time.sleep(PAUSE_SECONDS)
+    try:
+        return fn(*args, **kwargs)
+    except Exception as e:
+        if "allowance" not in str(e):
+            raise
+        log.info("IG per-minute allowance reached; waiting 65 seconds and trying once more")
+        time.sleep(65)
+        return fn(*args, **kwargs)
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS ig_sentiment (
@@ -56,18 +74,18 @@ def update(con, ig, today=None) -> pd.DataFrame:
     rows = []
     for sym, term in MARKETS.items():
         try:
-            epic = KNOWN_EPICS.get(sym) or pick_epic(ig.search(term), term)
+            epic = KNOWN_EPICS.get(sym) or pick_epic(_paced(ig.search, term), term)
             if not epic:
                 log.warning("%s: no IG market found for '%s'", sym, term)
                 continue
-            market_id = ig._req("GET", f"/markets/{epic}", "3").json()["instrument"]["marketId"]
+            market_id = _paced(ig._req, "GET", f"/markets/{epic}", "3").json()["instrument"]["marketId"]
             rows.append({"symbol": sym, "epic": epic, "market_id": market_id})
         except Exception as e:
             log.warning("%s: could not resolve IG market: %s", sym, e)
     if not rows:
         return pd.DataFrame()
     ids = ",".join(sorted({r["market_id"] for r in rows}))
-    sent = parse_sentiment(ig._req("GET", "/clientsentiment", "1", params={"marketIds": ids}).json())
+    sent = parse_sentiment(_paced(ig._req, "GET", "/clientsentiment", "1", params={"marketIds": ids}).json())
     now = datetime.now(timezone.utc).replace(tzinfo=None)
     for r in rows:
         r["long_pct"], r["short_pct"] = sent.get(r["market_id"], (None, None))
