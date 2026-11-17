@@ -26,7 +26,15 @@ MARKETS = {
     "XAUUSD": "Spot Gold", "XAGUSD": "Spot Silver", "XPTUSD": "Platinum",
     "COPPER": "Copper", "BRENT": "Brent Crude", "BTCUSD": "Bitcoin", "ETHUSD": "Ether",
 }
-KNOWN_EPICS = {"UK100": "IX.D.FTSE.DAILY.IP", "XAUUSD": "CS.D.USCGC.TODAY.IP", "BTCUSD": "CS.D.BITCOIN.TODAY.IP"}
+# Epics pinned from the markets this step matched on 10-12 Nov 2026 (table ig_sentiment), so the nightly run
+# makes no search calls: fewer requests against IG's per-minute allowance, and nothing depends on the market
+# search API (version 1 is decommissioned on 1 Dec 2026). Brent is still found by search (version 2).
+KNOWN_EPICS = {
+    "UK100": "IX.D.FTSE.DAILY.IP", "US500": "IX.D.SPTRD.DAILY.IP", "NAS100": "IX.D.NASDAQ.CASH.IP",
+    "US30": "IX.D.DOW.DAILY.IP", "GER40": "IX.D.DAX.DAILY.IP", "AUS200": "IX.D.ASX.MONTH1.IP",
+    "XAUUSD": "CS.D.USCGC.TODAY.IP", "XAGUSD": "CS.D.USCSI.TODAY.IP", "XPTUSD": "MT.D.PL.Month2.IP",
+    "COPPER": "CS.D.COPPER.TODAY.IP", "BTCUSD": "CS.D.BITCOIN.TODAY.IP", "ETHUSD": "CS.D.ETHUSD.TODAY.IP",
+}
 
 # IG limits non-trading API requests per minute. This step makes two calls per market (search and market
 # details), so it runs straight after the price and trade downloads and was hitting the per-minute limit

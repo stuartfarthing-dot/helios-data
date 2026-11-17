@@ -64,8 +64,16 @@ class IG:
         except Exception:
             pass
 
-    def search(self, term):
-        return self._req("GET", "/markets", params={"searchTerm": term}).json()["markets"]
+    def search(self, term, page_size=50):
+        # Market search, version 2 (IG's Finder service). Version 1 of /markets?searchTerm= is
+        # decommissioned on 1 Dec 2026 (IG email, 17 Nov 2026). The v2 reply is read defensively:
+        # the list of markets is taken from "markets" or, failing that, the first list in the reply.
+        resp = self._req("GET", "/markets", "2",
+                         params={"searchTerm": term, "pageNumber": 0, "pageSize": page_size}).json()
+        markets = resp.get("markets")
+        if markets is None:
+            markets = next((v for v in resp.values() if isinstance(v, list)), [])
+        return markets
 
     def daily_prices(self, epic, n):
         # pageSize=0 turns off IG's paging (default pages are 20 bars, oldest first)
@@ -123,7 +131,7 @@ def main(argv=None):
     try:
         if args.find:
             for m in ig.search(args.find):
-                print(f"{m['epic']:<30} {m['instrumentName']:<40} {m.get('expiry')}")
+                print(f"{m.get('epic', ''):<30} {m.get('instrumentName', ''):<40} {m.get('expiry')}")
             return
         con = db.connect()
         for symbol in args.symbols:
