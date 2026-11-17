@@ -92,6 +92,35 @@ INSTRUMENTS = {
                 "asset_class": "index", "session_tz": "Asia/Hong_Kong", "session_shift": 7,
                 "spread": 5.0, "timeframes": DAILY_HOURLY, "history_start": "2012-01-01"},
 
+    # --- round 4 indices (added 17 Nov 2026): more markets for out-of-sample tests and the forward test ---
+    # European markets cut on the local calendar day, like GER40. India 50 is cut at 16:00 Mumbai (shift +8) and
+    # South Africa 40 at 17:00 Johannesburg (shift +7), just after each cash close. Spreads = IG DFB in-hours
+    # spread (IG product details page, 17 Nov 2026); out-of-hours spreads are wider.
+    "FRA40":   {"name": "France 40", "dukascopy": "E_CAAC-40",
+                "asset_class": "index", "session_tz": "Europe/Paris", "session_shift": 0,
+                "spread": 1.0, "timeframes": ["1d", "1h"], "history_start": "2012-01-01"},
+    "EU50":    {"name": "EU Stocks 50", "dukascopy": "E_DJE50XX",
+                "asset_class": "index", "session_tz": "Europe/Berlin", "session_shift": 0,
+                "spread": 1.5, "timeframes": ["1d", "1h"], "history_start": "2012-01-01"},
+    "ESP35":   {"name": "Spain 35", "dukascopy": "E_IBC-MAC",
+                "asset_class": "index", "session_tz": "Europe/Madrid", "session_shift": 0,
+                "spread": 5.0, "timeframes": ["1d", "1h"], "history_start": "2012-01-01"},
+    "NED25":   {"name": "Netherlands 25", "dukascopy": "NLD.IDX/EUR",
+                "asset_class": "index", "session_tz": "Europe/Amsterdam", "session_shift": 0,
+                "spread": 0.1, "timeframes": ["1d", "1h"], "history_start": "2012-01-01"},
+    "SWI20":   {"name": "Switzerland Blue Chip", "dukascopy": "E_SWMI",
+                "asset_class": "index", "session_tz": "Europe/Zurich", "session_shift": 0,
+                "spread": 2.0, "timeframes": ["1d", "1h"], "history_start": "2012-01-01"},
+    "ITA40":   {"name": "Italy 40", "dukascopy": "ITA.IDX/EUR",
+                "asset_class": "index", "session_tz": "Europe/Rome", "session_shift": 0,
+                "spread": 8.0, "timeframes": ["1d", "1h"], "history_start": "2012-01-01"},
+    "IND50":   {"name": "India 50", "dukascopy": "IND.IDX/USD",
+                "asset_class": "index", "session_tz": "Asia/Kolkata", "session_shift": 8,
+                "spread": 5.0, "timeframes": ["1d", "1h"], "history_start": "2012-01-01"},
+    "SA40":    {"name": "South Africa 40", "dukascopy": "SOA.IDX/ZAR",
+                "asset_class": "index", "session_tz": "Africa/Johannesburg", "session_shift": 7,
+                "spread": 8.0, "timeframes": ["1d", "1h"], "history_start": "2012-01-01"},
+
     # --- H25 research-only markets (added 11 Nov 2026) - loaded once by hand, not updated nightly ---
     # Run "Update market data" with symbols = WTI NATGAS GASOIL LTCUSD XRPUSD BCHUSD ADAUSD XLMUSD EOSUSD TRXUSD
     "WTI":     {"name": "WTI crude oil", "dukascopy": "E_Light", "active": False,
