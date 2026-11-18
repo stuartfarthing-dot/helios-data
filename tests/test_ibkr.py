@@ -59,3 +59,18 @@ def test_first_then_incremental_load(con):
 
 def test_unknown_share_is_skipped(con):
     assert ib.update(con, FakeClient([], found=False), "SHP", today=date(2026, 11, 18)) == 0
+
+
+def test_uk_breadth_view(con):
+    import pandas as pd
+    days = pd.to_datetime(["2026-11-16", "2026-11-17"]).tz_localize("UTC")
+    for i in range(60):                    # 60 shares: 40 rise on the 17th, 20 fall
+        last = 101.0 if i < 40 else 99.0
+        df = pd.DataFrame({"ts": days, "open": [100.0, last], "high": [100.0, last], "low": [100.0, last],
+                           "close": [100.0, last], "volume": [1000.0, 1000.0]})
+        db.write_bars(con, "ibkr", f"S{i}.L", "1d", df)
+    row = con.execute("SELECT shares, up, down, share_up, ad_line FROM uk_breadth "
+                      "WHERE session_date = DATE '2026-11-17'").fetchone()
+    assert row == (60, 40, 20, 0.667, 20)
+    # the first day has no previous close for any share, so it is left out
+    assert con.execute("SELECT count(*) FROM uk_breadth").fetchone()[0] == 1

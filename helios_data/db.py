@@ -256,6 +256,36 @@ SELECT t1.symbol, t1.exit_rule, t1.signal_date, t1.entry_date, t1.entry, t1.atr,
   EXISTS (SELECT 1 FROM t t0 WHERE t0.symbol = t1.symbol AND t0.signal_date < t1.signal_date
           AND t0.entry_date IS NOT NULL AND coalesce(t0.exit_date, DATE '9999-12-31') > t1.signal_date) AS skipped
 FROM t t1;
+
+-- UK market breadth (18 Nov 2026): one row per LSE trading day from the IBKR share bars (real exchange volume).
+-- share_up = fraction of shares closing higher; ad_line = running advances minus declines;
+-- traded_gbp_m = value traded (pence x shares / 100, in GBP millions); turnover_vs_20d = today's value traded
+-- against the previous 20 days' average; ftse_change_pct from the official close (uk100_cash).
+-- Days with fewer than 50 shares reporting are left out (partial loads).
+CREATE OR REPLACE VIEW uk_breadth AS
+WITH b AS (
+  SELECT symbol, CAST(ts AS DATE) AS session_date, close, volume,
+         lag(close) OVER (PARTITION BY symbol ORDER BY ts) AS pc
+  FROM bars WHERE source = 'ibkr' AND timeframe = '1d' AND symbol LIKE '%.L'),
+d AS (
+  SELECT session_date,
+    count(*) FILTER (WHERE pc IS NOT NULL) AS shares,
+    count(*) FILTER (WHERE close > pc) AS up,
+    count(*) FILTER (WHERE close < pc) AS down,
+    sum(close * volume) / 100 AS traded_gbp,
+    median(100 * (close / pc - 1)) AS median_change_pct
+  FROM b GROUP BY session_date
+  HAVING count(*) FILTER (WHERE pc IS NOT NULL) >= 50),
+f AS (SELECT session_date, official_close, lag(official_close) OVER (ORDER BY session_date) AS prev FROM uk100_cash)
+SELECT d.session_date, shares, up, down,
+  round(up / shares, 3) AS share_up,
+  sum(up - down) OVER (ORDER BY d.session_date) AS ad_line,
+  round(traded_gbp / 1e6, 1) AS traded_gbp_m,
+  round(traded_gbp / avg(traded_gbp) OVER (ORDER BY d.session_date ROWS BETWEEN 20 PRECEDING AND 1 PRECEDING), 2)
+    AS turnover_vs_20d,
+  round(median_change_pct, 2) AS median_change_pct,
+  round(100 * (f.official_close / f.prev - 1), 2) AS ftse_change_pct
+FROM d LEFT JOIN f USING (session_date);
 """
 
 
