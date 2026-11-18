@@ -59,10 +59,12 @@ Tools:
 - `python -m helios_data.ig_ingest [--find "Spot Gold"]`
 - `python -m helios_data.status`
 - `python -m helios_data.news_ingest` and `python -m helios_data.narratives`: news collection and daily narrative measures
+- `python -m helios_data.source_compare [--ftse-file FILE.xlsx]`: H-000 check of IG and Dukascopy FTSE prices against the official close
 - `python -m pytest`: offline tests using fake data
 
 ## Notes
 
 - `duckdb` is pinned to a version MotherDuck supports. Check motherduck.com/docs/duckdb-versions.json before upgrading.
+- IG daily bars are stamped at midnight London time and stored in UTC, so in summer they read as 23:00 the previous day. Convert to London time before taking the date. IG's daily close is an evening price (about 21:00 London), not the 16:35 cash close.
 - IG allows about 10,000 historical price points a week. The first IG run takes about 1,500 daily bars per market; after that it only needs a few points a day.
 - The IG Spot Gold epic in `config.py` should be confirmed with `python -m helios_data.ig_ingest --find "Spot Gold"`.
