@@ -14,6 +14,7 @@ Market prices for Helios research, stored in the cloud and kept up to date autom
 | `daily`, `hourly`, `minute` | Dukascopy bars by timeframe (raw `daily` includes short Sunday sessions) |
 | `daily_session` | Clean trading days built from hourly bars (Gold: New York 5pm close; UK100: London day to midnight, which includes the US afternoon) |
 | `uk100_cash` | **Use this for FTSE 100 daily research:** London cash session 08:00–16:35 from Dukascopy minute bars, LSE trading days only, from 2015, with the official close alongside (H-000) |
+| `bars` where `source='ibkr'` | LSE daily bars for UK shares from Interactive Brokers: prices in pence, **real exchange volume** (shares traded). Loaded from your PC, not by the nightly job |
 | `ig_daily` | IG daily bars (mid prices); stamped at London midnight, and the close is an evening price |
 | `coverage` | What's stored: bars, first and last date per market and timeframe |
 | `instruments` | Each market: asset class, trading-day calendar, typical IG spread |
@@ -60,6 +61,7 @@ Tools:
 - `python -m helios_data.ig_ingest [--find "Spot Gold"]`
 - `python -m helios_data.status`
 - `python -m helios_data.news_ingest` and `python -m helios_data.narratives`: news collection and daily narrative measures
+- `python -m helios_data.ibkr_ingest [--test] [--symbols HSBA BP]`: LSE daily bars with real exchange volume from Interactive Brokers (needs IB Gateway running and logged in on this PC; not run in the cloud)
 - `python -m helios_data.source_compare [--ftse-file FILE.xlsx]`: H-000 check of IG and Dukascopy FTSE prices against the official close
 - `python -m pytest`: offline tests using fake data
 
