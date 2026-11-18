@@ -79,3 +79,14 @@ def test_run_saves_results(con):
     assert res["verdict"].tolist() == ["pass"]
     assert con.execute("SELECT count(*) FROM source_compare").fetchone()[0] == 1
     assert con.execute("SELECT count(*) FROM source_compare_worst").fetchone()[0] == sc.WORST_N
+
+
+def test_env_file_token_ignored_when_local_db_set(tmp_path, monkeypatch):
+    # A real token in .env must never send tests to the cloud warehouse.
+    (tmp_path / ".env").write_text("MOTHERDUCK_TOKEN=should-not-be-used\n")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("MOTHERDUCK_TOKEN", raising=False)
+    monkeypatch.setenv("HELIOS_DB", str(tmp_path / "t.duckdb"))
+    con = db.connect()
+    assert con.execute("SELECT count(*) FROM bars").fetchone()[0] == 0
+    assert (tmp_path / "t.duckdb").exists()

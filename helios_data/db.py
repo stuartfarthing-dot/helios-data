@@ -3,7 +3,8 @@
 - In the cloud (GitHub Actions, or anywhere with MOTHERDUCK_TOKEN set):
   connects to the MotherDuck database 'helios'.
 - Otherwise: uses a local DuckDB file (HELIOS_DB, default data/helios.duckdb),
-  which is handy for testing.
+  which is handy for testing. Setting HELIOS_DB always forces the local file.
+- Local runs read MOTHERDUCK_TOKEN from a .env file in the repo folder.
 """
 
 from __future__ import annotations
@@ -249,7 +250,15 @@ def refresh_instruments(con) -> None:
 
 
 def connect() -> duckdb.DuckDBPyConnection:
-    if os.getenv("MOTHERDUCK_TOKEN"):
+    # Read .env for local runs (in the cloud the token comes from GitHub secrets). An explicit
+    # HELIOS_DB always means a local file, so tests never pick up the real token from .env.
+    if not os.getenv("HELIOS_DB"):
+        try:
+            from dotenv import load_dotenv
+            load_dotenv()
+        except ImportError:
+            pass
+    if os.getenv("MOTHERDUCK_TOKEN") and not os.getenv("HELIOS_DB"):
         con = duckdb.connect("md:")
         con.execute(f"CREATE DATABASE IF NOT EXISTS {DATABASE_NAME}")
         con.execute(f"USE {DATABASE_NAME}")
