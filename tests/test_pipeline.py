@@ -210,3 +210,11 @@ def test_yahoo_daily(con):
     assert res["SIL"] == 2
     rows = con.execute("SELECT ts::DATE, close FROM bars WHERE source='yahoo' AND symbol='SIL' ORDER BY ts").fetchall()
     assert [str(r[0]) for r in rows] == ["2026-11-05", "2026-11-06"] and rows[1][1] == 52.5
+
+
+def test_minute_bars_can_start_later_than_daily(con, monkeypatch):
+    calls = []
+    monkeypatch.setattr(dukascopy_ingest, "fetch_range",
+                        lambda code, tf, start, end: calls.append(start) or fake_bars(start, end, "D"))
+    dukascopy_ingest.update(con, "XAGUSD", "1m", now=datetime(2020, 1, 3, tzinfo=timezone.utc))
+    assert calls[0] == datetime(2020, 1, 1, tzinfo=timezone.utc)      # history_start_1m, not 2003

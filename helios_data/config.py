@@ -48,7 +48,8 @@ INSTRUMENTS = {
     # --- commodities (added 9 Nov 2026) ---
     "XAGUSD": {"name": "Spot Silver", "dukascopy": "XAG/USD",
                "asset_class": "commodity", "session_tz": "America/New_York", "session_shift": 7,
-               "spread": 0.02, "timeframes": DAILY_HOURLY, "history_start": "2003-01-01"},
+               "spread": 0.02, "timeframes": ALL_TIMEFRAMES, "history_start": "2003-01-01",
+               "history_start_1m": "2020-01-01"},   # minute bars added 18 Nov 2026 (H-002)
     "XPTUSD": {"name": "Platinum", "dukascopy": "XPT.CMD/USD",
                "asset_class": "commodity", "session_tz": "America/New_York", "session_shift": 7,
                "spread": 1.0, "timeframes": DAILY_HOURLY, "history_start": "2003-01-01"},

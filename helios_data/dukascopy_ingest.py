@@ -50,7 +50,8 @@ def update(con, symbol: str, timeframe: str, start_override: str | None = None, 
     elif last is not None:
         start = last.replace(tzinfo=timezone.utc)          # re-fetch the last bar: it may have been incomplete
     else:
-        start = datetime.fromisoformat(inst["history_start"]).replace(tzinfo=timezone.utc)
+        first = inst.get(f"history_start_{timeframe}", inst["history_start"])   # e.g. minute bars start later
+        start = datetime.fromisoformat(first).replace(tzinfo=timezone.utc)
 
     total = 0
     cursor = start
