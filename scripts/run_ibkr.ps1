@@ -1,4 +1,4 @@
-# Helios: nightly IBKR load, run by Windows Task Scheduler (see install_ibkr_task.ps1).
+# Helios: nightly IBKR load (daily bars, then 5-minute bars), run by Windows Task Scheduler (see install_ibkr_task.ps1).
 # Needs IB Gateway running and logged in on this PC. Writes a dated log to logs\ and
 # the result also shows in the warehouse table ingest_log (source 'ibkr').
 $ErrorActionPreference = "Continue"
@@ -10,5 +10,8 @@ $python = "$repo\.venv\Scripts\python.exe"
 "=== $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') start ===" | Out-File -Append -Encoding utf8 $log
 & $python -m helios_data.ibkr_ingest 2>&1 | ForEach-Object { "$_" } | Out-File -Append -Encoding utf8 $log
 $code = $LASTEXITCODE
+"=== $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') daily done (exit $code); 5-minute bars ===" | Out-File -Append -Encoding utf8 $log
+& $python -m helios_data.ibkr_ingest --intraday 2>&1 | ForEach-Object { "$_" } | Out-File -Append -Encoding utf8 $log
+if ($LASTEXITCODE -ne 0) { $code = $LASTEXITCODE }
 "=== $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') finished, exit code $code ===" | Out-File -Append -Encoding utf8 $log
 exit $code

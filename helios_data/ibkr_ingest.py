@@ -13,6 +13,8 @@ Settings come from .env (all optional): IBKR_HOST (127.0.0.1), IBKR_PORT (4001),
     python -m helios_data.ibkr_ingest --test               # one share (HSBA): checks access, writes nothing
     python -m helios_data.ibkr_ingest                      # every share in config.UK_SHARES, 5 years first time
     python -m helios_data.ibkr_ingest --symbols HSBA BP    # just these
+    python -m helios_data.ibkr_ingest --intraday           # 5-minute bars for INTRADAY (two years first time)
+    python -m helios_data.ibkr_ingest --intraday --symbols ISF SGLN
 
 Stored in `bars` as source 'ibkr', symbol '<ticker>.L', timeframe '1d', ts = trading date (UTC midnight),
 prices in pence (as IBKR's API returns them, matching the Dukascopy UK shares), volume = shares traded on the LSE.
@@ -20,6 +22,11 @@ The Helios ticker is kept even where the company has since changed its LSE symbo
 Shell's SHEL bars), so IBKR and Dukascopy rows pair up. Delisted companies have no IBKR data: they are
 logged and skipped (their Dukascopy history remains).
 IBKR allows 60 historical requests per 10 minutes, so a full first load (~110 shares) takes ~20 minutes.
+
+Intraday (18 Nov 2026, short-term testing regime): 5-minute bars with real volume, regular hours only, for the
+ETFs/ETCs and FTSE heavyweights in INTRADAY. Stored as timeframe '5m', ts = bar start in UTC, prices as quoted
+(pence for GBP lines; CSPX in US dollars). The first run backfills month by month for INTRADAY_YEARS (about
+24 requests per instrument, ~1 hour for the full set); later runs fetch only the days since the last bar.
 """
 
 from __future__ import annotations
@@ -39,6 +46,17 @@ log = logging.getLogger("ibkr")
 SOURCE = "ibkr"
 FIRST_RUN = "5 Y"
 PAUSE_SECONDS = 11          # stays under IBKR's 60 requests per 10 minutes
+
+# 5-minute set: Helios ticker -> currency of the LSE line (H-001 ETFs/ETCs + FTSE heavyweights)
+INTRADAY = {
+    "ISF": "GBP", "CSPX": "USD", "SGLN": "GBP",
+    "AZN": "GBP", "RDSB": "GBP", "HSBA": "GBP", "ULVR": "GBP", "BP": "GBP", "RIO": "GBP", "GSK": "GBP",
+    "REL": "GBP", "BATS": "GBP", "LSE": "GBP", "DGE": "GBP", "BARC": "GBP", "LLOY": "GBP", "NG": "GBP",
+    "RR": "GBP",
+}
+ETFS = {"ISF", "CSPX", "SGLN"}   # London-listed funds sit on IBKR's LSEETF exchange, not LSE
+INTRADAY_YEARS = 2
+INTRADAY_CHUNK = "1 M"      # one request per month of 5-minute bars
 
 # Helios ticker -> current LSE symbol at IBKR, where they differ. Anything not listed is tried as-is,
 # then with a trailing dot (IBKR writes two-letter LSE tickers such as BP and RR as "BP." and "RR.").
@@ -80,6 +98,24 @@ def duration_for(last, today: date) -> str:
     return f"{max(5, days + 5)} D"
 
 
+def intraday_frame(bars) -> pd.DataFrame:
+    """5-minute BarData -> bars frame, ts = bar start in UTC."""
+    rows = [{"ts": b.date, "open": b.open, "high": b.high, "low": b.low, "close": b.close,
+             "volume": float(b.volume) if b.volume is not None else None} for b in bars or []]
+    df = pd.DataFrame(rows, columns=["ts", "open", "high", "low", "close", "volume"])
+    if df.empty:
+        return df
+    df["ts"] = pd.to_datetime(df["ts"], utc=True)
+    df = df[df["volume"].fillna(0) >= 0]
+    return df
+
+
+def intraday_duration(last, now: datetime) -> str:
+    """Top-up request size: the days since the last stored bar plus a margin (IBKR caps 5-minute requests)."""
+    days = (now - pd.Timestamp(last).tz_localize("UTC").to_pydatetime()).days if last is not None else 30
+    return f"{min(30, max(2, days + 2))} D"
+
+
 class IBKR:
     """Read-only connection to a running IB Gateway / TWS."""
 
@@ -112,10 +148,13 @@ class IBKR:
     def disconnect(self):
         self.ib.disconnect()
 
-    def contract(self, ticker: str):
+    def contract(self, ticker: str, currency: str = "GBP"):
         from ib_async import Stock
+        if ticker in ETFS:                         # funds: one exact lookup on LSEETF
+            found = self.ib.qualifyContracts(Stock(ticker, "LSEETF", currency))
+            return found[0] if found and getattr(found[0], "conId", 0) else None
         for sym in candidates(ticker):
-            found = self.ib.qualifyContracts(Stock(sym, "LSE", "GBP"))
+            found = self.ib.qualifyContracts(Stock(sym, "LSE", currency))
             if found and getattr(found[0], "conId", 0):
                 return found[0]
         return None
@@ -123,6 +162,12 @@ class IBKR:
     def daily_bars(self, contract, duration: str):
         return self.ib.reqHistoricalData(contract, endDateTime="", durationStr=duration, barSizeSetting="1 day",
                                          whatToShow="TRADES", useRTH=True, formatDate=1, timeout=60)
+
+
+    def intraday_bars(self, contract, end, duration: str):
+        """5-minute TRADES bars, regular hours, ending at `end` ('' = now); dates come back in UTC."""
+        return self.ib.reqHistoricalData(contract, endDateTime=end, durationStr=duration, barSizeSetting="5 mins",
+                                         whatToShow="TRADES", useRTH=True, formatDate=2, timeout=120)
 
 
 def update(con, client, ticker: str, today: date | None = None) -> int:
@@ -136,6 +181,36 @@ def update(con, client, ticker: str, today: date | None = None) -> int:
     if not df.empty:
         df = df[df["ts"].dt.date < today]      # today's bar is incomplete
     return db.write_bars(con, SOURCE, f"{ticker}.L", "1d", df, note=f"{contract.symbol} conId {contract.conId}")
+
+
+def update_intraday(con, client, ticker: str, currency: str = "GBP", now: datetime | None = None,
+                    pause: float = PAUSE_SECONDS) -> int:
+    """Backfill (first run) or top up the 5-minute bars of one instrument. Returns bars written."""
+    now = now or datetime.now(timezone.utc)
+    contract = client.contract(ticker, currency)
+    if contract is None:
+        log.warning("%s: no London %s contract at IBKR - skipped", ticker, currency)
+        return 0
+    symbol, note = f"{ticker}.L", f"{contract.symbol} conId {contract.conId} 5m"
+    last = db.last_bar(con, SOURCE, symbol, "5m")
+    if last is not None:
+        df = intraday_frame(client.intraday_bars(contract, "", intraday_duration(last, now)))
+        return db.write_bars(con, SOURCE, symbol, "5m", df, note=note)
+    # first run: walk back a month at a time until INTRADAY_YEARS is covered or IBKR has nothing older
+    start = pd.Timestamp(now) - pd.DateOffset(years=INTRADAY_YEARS)
+    end, total = "", 0
+    for _ in range(INTRADAY_YEARS * 12 + 2):
+        df = intraday_frame(client.intraday_bars(contract, end, INTRADAY_CHUNK))
+        if df.empty:
+            break
+        total += db.write_bars(con, SOURCE, symbol, "5m", df, note=note)
+        earliest = df["ts"].min()
+        if earliest <= start:
+            break
+        end = earliest.strftime("%Y%m%d-%H:%M:%S")        # UTC end time for the next (older) chunk
+        if pause:
+            time.sleep(pause)
+    return total
 
 
 def test(client) -> None:
@@ -161,6 +236,7 @@ def main(argv=None):
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--symbols", nargs="*", default=list(UK_SHARES), help="Helios UK tickers (default: all UK_SHARES)")
     p.add_argument("--test", action="store_true", help="check access with one share; write nothing")
+    p.add_argument("--intraday", action="store_true", help="5-minute bars for INTRADAY instead of daily bars")
     args = p.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
 
@@ -171,6 +247,18 @@ def main(argv=None):
             test(client)
             return
         con = db.connect()
+        if args.intraday:
+            wanted = args.symbols if args.symbols != list(UK_SHARES) else list(INTRADAY)
+            for i, ticker in enumerate(wanted):
+                if i:
+                    time.sleep(PAUSE_SECONDS)
+                try:
+                    n = update_intraday(con, client, ticker, INTRADAY.get(ticker, "GBP"))
+                    log.info("%s 5m: %d bars written (%d/%d)", ticker, n, i + 1, len(wanted))
+                except Exception as exc:
+                    log.warning("%s 5m: failed (%s)", ticker, exc)
+            log.info("DONE intraday")
+            return
         done, skipped = 0, []
         for i, ticker in enumerate(args.symbols):
             if i:

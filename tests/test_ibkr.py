@@ -1,6 +1,6 @@
 """Offline tests for the IBKR loader: a fake client stands in for IB Gateway."""
 
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from types import SimpleNamespace
 
 import pytest
@@ -91,3 +91,33 @@ def test_uk_breadth_long_joins_dukascopy_before_ibkr(con):
     rows = con.execute("SELECT session_date, source, share_up, ad_line FROM uk_breadth_long ORDER BY 1").fetchall()
     assert [(str(r[0]), r[1], r[2], r[3]) for r in rows] == [
         ("2021-11-02", "dukascopy", 0.2, -33), ("2026-11-17", "ibkr", 1.0, 22)]
+
+
+class FakeIntraday:
+    """Serves 5-minute bars a 'month' (here: one day of 3 bars) at a time, going back from the newest."""
+    def __init__(self, days):
+        self.days, self.calls = days, []
+
+    def contract(self, ticker, currency="GBP"):
+        return SimpleNamespace(symbol=ticker, conId=2, currency=currency, exchange="LSE")
+
+    def intraday_bars(self, contract, end, duration):
+        self.calls.append((end, duration))
+        if not self.days:
+            return []
+        d = self.days.pop()                       # newest remaining day
+        return [SimpleNamespace(date=datetime(d.year, d.month, d.day, 8, m, tzinfo=timezone.utc), open=1.0,
+                                high=1.0, low=1.0, close=1.0, volume=100.0) for m in (0, 5, 10)]
+
+
+def test_intraday_backfill_then_top_up(con):
+    fake = FakeIntraday([date(2026, 11, 16), date(2026, 11, 17)])
+    now = datetime(2026, 11, 18, 18, 0, tzinfo=timezone.utc)
+    n = ib.update_intraday(con, fake, "ISF", now=now, pause=0)
+    assert n == 6 and len(fake.calls) == 3            # two chunks with bars, then an empty one ends the backfill
+    assert fake.calls[0][0] == "" and fake.calls[1][0] == "20261117-08:00:00"
+    assert con.execute("SELECT count(*) FROM bars WHERE timeframe='5m' AND symbol='ISF.L'").fetchone()[0] == 6
+    fake2 = FakeIntraday([date(2026, 11, 18)])
+    ib.update_intraday(con, fake2, "ISF", now=now, pause=0)
+    assert fake2.calls == [("", "3 D")]               # top-up: 1 day since the last bar + 2 margin
+    assert con.execute("SELECT count(*) FROM bars WHERE timeframe='5m'").fetchone()[0] == 9

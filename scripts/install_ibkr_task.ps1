@@ -9,11 +9,11 @@ $name = "Helios IBKR nightly load"
 $action = New-ScheduledTaskAction -Execute "powershell.exe" `
     -Argument "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$script`"" -WorkingDirectory $repo
 $trigger = New-ScheduledTaskTrigger -Weekly -DaysOfWeek Monday, Tuesday, Wednesday, Thursday, Friday -At 18:30
-$settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Hours 1) `
+$settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Hours 3) `
     -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
 
 Register-ScheduledTask -TaskName $name -Action $action -Trigger $trigger -Settings $settings `
-    -Description "Loads LSE daily bars with real volume from IB Gateway into the Helios warehouse (helios_data.ibkr_ingest)." `
+    -Description "Loads LSE daily and 5-minute bars with real volume from IB Gateway into the Helios warehouse (helios_data.ibkr_ingest)." `
     -Force | Out-Null
 Get-ScheduledTask -TaskName $name | Select-Object TaskName, State
 Write-Host "Next run:" (Get-ScheduledTaskInfo -TaskName $name).NextRunTime
