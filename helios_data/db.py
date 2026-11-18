@@ -65,6 +65,29 @@ WHERE session_date < current_session   -- completed sessions only
 GROUP BY symbol, session_date, weekends
 HAVING weekends OR dayofweek(session_date) BETWEEN 1 AND 5;
 
+-- FTSE 100 cash session (H-000, 18 Nov 2026): one bar per London Stock Exchange trading day, built from
+-- Dukascopy UK 100 minute bars between 08:00 and 16:35 London time (the close is the price just after the
+-- closing auction). Trading days come from the official ^FTSE closes (Yahoo), which drops UK bank holidays,
+-- and the official close is carried alongside. From 2015: earlier Dukascopy data tracks the index poorly.
+-- Half days (24 and 31 December, official close 12:30) still use the 16:35 price.
+CREATE OR REPLACE VIEW uk100_cash AS
+WITH m AS (
+  SELECT ts, CAST(timezone('Europe/London', ts AT TIME ZONE 'UTC') AS TIMESTAMP) AS lt, open, high, low, close, volume
+  FROM minute WHERE symbol = 'UK100' AND ts >= TIMESTAMP '2014-12-31 00:00:00'
+), s AS (
+  SELECT lt::DATE AS session_date, arg_min(open, ts) AS open, max(high) AS high, min(low) AS low,
+         arg_max(close, ts) AS close, sum(volume) AS volume, count(*) AS minutes
+  FROM m
+  WHERE strftime(lt, '%H:%M') >= '08:00' AND strftime(lt, '%H:%M') < '16:35'
+  GROUP BY 1
+), ref AS (
+  SELECT ts::DATE AS session_date, close AS official_close
+  FROM bars WHERE source = 'yahoo' AND symbol = '^FTSE' AND timeframe = '1d'
+)
+SELECT 'UK100' AS symbol, s.session_date, s.open, s.high, s.low, s.close, ref.official_close, s.volume, s.minutes
+FROM s JOIN ref USING (session_date)
+WHERE s.session_date >= DATE '2015-01-01' AND dayofweek(s.session_date) BETWEEN 1 AND 5 AND s.minutes >= 60;
+
 -- What is in the warehouse
 CREATE OR REPLACE VIEW coverage AS
 SELECT source, symbol, timeframe, count(*) AS bars, min(ts) AS first_bar, max(ts) AS last_bar
