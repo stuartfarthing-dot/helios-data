@@ -16,6 +16,7 @@ Market prices for Helios research, stored in the cloud and kept up to date autom
 | `uk100_cash` | **Use this for FTSE 100 daily research:** London cash session 08:00–16:35 from Dukascopy minute bars, LSE trading days only, from 2015, with the official close alongside (H-000) |
 | `bars` where `source='ibkr'` | LSE daily bars for UK shares from Interactive Brokers: prices in pence, **real exchange volume** (shares traded). Loaded from your PC, not by the nightly job |
 | `uk_breadth` | UK market breadth per LSE trading day from the IBKR share bars: shares up and down, share_up, running advance-decline line, value traded (GBP m), turnover against the 20-day average, median share change and the FTSE's official change |
+| `uk_breadth_long` | `uk_breadth` extended back to 2011 with the Dukascopy UK share prices (`source` says which); value traded and turnover only from Nov 2021 (IBKR). Trading days and the FTSE change from the official closes |
 | `paper_trades`, `paper_orders` | IBKR paper trading (`ibkr_trade`): one row per H1a/H14/H18 trade (signal, size, stop, fills, exit) and a log of every order sent |
 | `ig_daily` | IG daily bars (mid prices); stamped at London midnight, and the close is an evening price |
 | `coverage` | What's stored: bars, first and last date per market and timeframe |

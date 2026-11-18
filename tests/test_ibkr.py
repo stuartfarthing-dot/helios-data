@@ -74,3 +74,20 @@ def test_uk_breadth_view(con):
     assert row == (60, 40, 20, 0.667, 20)
     # the first day has no previous close for any share, so it is left out
     assert con.execute("SELECT count(*) FROM uk_breadth").fetchone()[0] == 1
+
+
+def test_uk_breadth_long_joins_dukascopy_before_ibkr(con):
+    import pandas as pd
+    duk_days = pd.to_datetime(["2021-11-01", "2021-11-02"]).tz_localize("UTC")
+    ib_days = pd.to_datetime(["2026-11-16", "2026-11-17"]).tz_localize("UTC")
+    for i in range(55):
+        mk = lambda days, last: pd.DataFrame({"ts": days, "open": [100.0, last], "high": [100.0, last],
+                                               "low": [100.0, last], "close": [100.0, last], "volume": [1.0, 1.0]})
+        db.write_bars(con, "dukascopy", f"S{i}.L", "1d", mk(duk_days, 101.0 if i < 11 else 99.0))
+        db.write_bars(con, "ibkr", f"S{i}.L", "1d", mk(ib_days, 101.0))
+    ftse = pd.DataFrame({"ts": list(duk_days) + list(ib_days), "open": 1.0, "high": 1.0, "low": 1.0,
+                         "close": [100.0, 99.0, 100.0, 101.0], "volume": 0.0})
+    db.write_bars(con, "yahoo", "^FTSE", "1d", ftse)
+    rows = con.execute("SELECT session_date, source, share_up, ad_line FROM uk_breadth_long ORDER BY 1").fetchall()
+    assert [(str(r[0]), r[1], r[2], r[3]) for r in rows] == [
+        ("2021-11-02", "dukascopy", 0.2, -33), ("2026-11-17", "ibkr", 1.0, 22)]

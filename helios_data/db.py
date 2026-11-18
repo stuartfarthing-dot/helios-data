@@ -286,6 +286,38 @@ SELECT d.session_date, shares, up, down,
   round(median_change_pct, 2) AS median_change_pct,
   round(100 * (f.official_close / f.prev - 1), 2) AS ftse_change_pct
 FROM d LEFT JOIN f USING (session_date);
+
+-- Long UK breadth (18 Nov 2026): uk_breadth extended back to 2011 with the Dukascopy UK share prices (about 80
+-- shares; no real volume, so traded_gbp_m and turnover_vs_20d are NULL before IBKR starts in Nov 2021).
+-- Dukascopy and IBKR share_up agree closely on the overlap (correlation 0.99, mean difference 0.023).
+-- Trading days and ftse_change_pct come from the official FTSE 100 closes (Yahoo ^FTSE).
+CREATE OR REPLACE VIEW uk_breadth_long AS
+WITH ref AS (
+  SELECT CAST(ts AS DATE) AS session_date, close AS ftse_close, lag(close) OVER (ORDER BY ts) AS ftse_prev
+  FROM bars WHERE source = 'yahoo' AND symbol = '^FTSE'),
+d AS (
+  SELECT CAST(ts AS DATE) AS session_date, symbol, close, lag(close) OVER (PARTITION BY symbol ORDER BY ts) AS pc
+  FROM bars WHERE source = 'dukascopy' AND timeframe = '1d' AND symbol LIKE '%.L' AND dayofweek(ts) BETWEEN 1 AND 5),
+duk AS (
+  SELECT session_date, 'dukascopy' AS source,
+    count(*) FILTER (WHERE pc IS NOT NULL) AS shares,
+    count(*) FILTER (WHERE close > pc) AS up,
+    count(*) FILTER (WHERE close < pc) AS down,
+    median(100 * (close / pc - 1)) AS median_change_pct,
+    CAST(NULL AS DOUBLE) AS traded_gbp_m, CAST(NULL AS DOUBLE) AS turnover_vs_20d
+  FROM d GROUP BY session_date
+  HAVING count(*) FILTER (WHERE pc IS NOT NULL) >= 50),
+c AS (
+  SELECT * FROM duk WHERE session_date < (SELECT min(session_date) FROM uk_breadth)
+  UNION ALL
+  SELECT session_date, 'ibkr', shares, up, down, median_change_pct, traded_gbp_m, turnover_vs_20d FROM uk_breadth)
+SELECT c.session_date, c.source, c.shares, c.up, c.down,
+  round(c.up / c.shares, 3) AS share_up,
+  sum(c.up - c.down) OVER (ORDER BY c.session_date) AS ad_line,
+  round(c.median_change_pct, 2) AS median_change_pct,
+  c.traded_gbp_m, c.turnover_vs_20d,
+  round(100 * (r.ftse_close / r.ftse_prev - 1), 2) AS ftse_change_pct
+FROM c JOIN ref r USING (session_date);
 """
 
 
