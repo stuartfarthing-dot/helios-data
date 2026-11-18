@@ -3,8 +3,9 @@
 .env.*
 !.env.example
 
-# local databases and downloads
+# local databases, downloads and run logs
 data/
+logs/
 *.duckdb
 *.duckdb.wal
 

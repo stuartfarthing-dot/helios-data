@@ -15,6 +15,7 @@ Market prices for Helios research, stored in the cloud and kept up to date autom
 | `daily_session` | Clean trading days built from hourly bars (Gold: New York 5pm close; UK100: London day to midnight, which includes the US afternoon) |
 | `uk100_cash` | **Use this for FTSE 100 daily research:** London cash session 08:00–16:35 from Dukascopy minute bars, LSE trading days only, from 2015, with the official close alongside (H-000) |
 | `bars` where `source='ibkr'` | LSE daily bars for UK shares from Interactive Brokers: prices in pence, **real exchange volume** (shares traded). Loaded from your PC, not by the nightly job |
+| `paper_trades`, `paper_orders` | IBKR paper trading (`ibkr_trade`): one row per H1a/H14/H18 trade (signal, size, stop, fills, exit) and a log of every order sent |
 | `ig_daily` | IG daily bars (mid prices); stamped at London midnight, and the close is an evening price |
 | `coverage` | What's stored: bars, first and last date per market and timeframe |
 | `instruments` | Each market: asset class, trading-day calendar, typical IG spread |
@@ -62,6 +63,9 @@ Tools:
 - `python -m helios_data.status`
 - `python -m helios_data.news_ingest` and `python -m helios_data.narratives`: news collection and daily narrative measures
 - `python -m helios_data.ibkr_ingest [--test] [--symbols HSBA BP]`: LSE daily bars with real exchange volume from Interactive Brokers (needs IB Gateway running and logged in on this PC; not run in the cloud)
+- `scripts\run_ibkr.ps1`: the nightly IBKR load with a dated log in `logs\`. Install the weekday 18:30 scheduled task once with `powershell -ExecutionPolicy Bypass -File scripts\install_ibkr_task.ps1`. IB Gateway must be running with Configure > Settings > Lock and Exit set to Auto restart; IBKR asks for a phone-approved login about once a week
+- `python -m helios_data.ibkr_trade [--offline | --check-contracts | --send] [--refresh] [--any-time]`: H1a, H14 and H18 on IBKR CFDs. Dry run by default (prints the plan, sends and records nothing); `--send` works on a paper account only (IDs starting DU) and is blocked by a `STOP_TRADING` file. Rules and entry deadlines are in the module docstring
+- `scripts\run_trade.ps1`: the hourly paper-trading run (`--send --refresh`) with a dated log in `logs\`. Install with `powershell -ExecutionPolicy Bypass -File scripts\install_trade_task.ps1`; needs the paper IB Gateway (port 4002)
 - `python -m helios_data.source_compare [--ftse-file FILE.xlsx]`: H-000 check of IG and Dukascopy FTSE prices against the official close
 - `python -m pytest`: offline tests using fake data
 
