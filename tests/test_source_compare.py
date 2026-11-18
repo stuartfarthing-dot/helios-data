@@ -90,3 +90,21 @@ def test_env_file_token_ignored_when_local_db_set(tmp_path, monkeypatch):
     con = db.connect()
     assert con.execute("SELECT count(*) FROM bars").fetchone()[0] == 0
     assert (tmp_path / "t.duckdb").exists()
+
+
+def test_uk100_cash_view(con):
+    # Two London days in winter (UTC = London) plus a bank holiday that has no official close.
+    ts = pd.to_datetime(
+        [f"2026-11-16 {h}" for h in ("07:59", "08:00", "12:00", "16:34", "16:35")]
+        + [f"2026-11-17 08:{m:02d}" for m in range(0, 60)] + ["2026-11-17 16:34"]
+        + [f"2026-12-28 08:{m:02d}" for m in range(0, 61) if m < 60] + ["2026-12-28 16:34"], utc=True)
+    close = np.arange(len(ts), dtype=float) + 100
+    df = pd.DataFrame({"ts": ts, "open": close, "high": close + 1, "low": close - 1, "close": close, "volume": 1.0})
+    db.write_bars(con, "dukascopy", "UK100", "1m", df)
+    ref = pd.DataFrame({"ts": pd.to_datetime(["2026-11-16", "2026-11-17"]).tz_localize("UTC"),
+                        "open": 1.0, "high": 1.0, "low": 1.0, "close": [500.0, 501.0], "volume": 0.0})
+    db.write_bars(con, "yahoo", sc.YAHOO_FTSE, "1d", ref)
+    rows = con.execute("SELECT session_date::VARCHAR, open, close, official_close, minutes FROM uk100_cash ORDER BY 1").fetchall()
+    days = [r[0] for r in rows]
+    assert days == ["2026-11-17"]            # 16 Nov has under 60 cash minutes; 28 Dec has no official close
+    assert rows[0][1] == close[5] and rows[0][2] == close[65] and rows[0][3] == 501.0 and rows[0][4] == 61

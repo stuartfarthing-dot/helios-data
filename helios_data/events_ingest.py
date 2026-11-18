@@ -211,7 +211,8 @@ def update_dividends(con, tickers=None, fetch=fetch_dividends, pause: float = 1.
 # Daily closes for the gold/silver ETFs, adjusted for dividends and splits. Silver miners (SIL, SILJ)
 # are not on Dukascopy; the rest are here too because Yahoo's history is longer. Stored in `bars`
 # with source = 'yahoo', timeframe = '1d', ts = the trading date (NYSE session).
-YAHOO_DAILY = ["GDX", "GDXJ", "SIL", "SILJ", "GLD", "SLV"]
+# ^FTSE (official FTSE 100 close, London session) is the trading calendar and reference for uk100_cash (H-000).
+YAHOO_DAILY = ["GDX", "GDXJ", "SIL", "SILJ", "GLD", "SLV", "^FTSE"]
 
 
 def _fetch_yahoo_history(ticker: str):

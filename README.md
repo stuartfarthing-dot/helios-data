@@ -12,8 +12,9 @@ Market prices for Helios research, stored in the cloud and kept up to date autom
 |---|---|
 | `bars` | Every bar: `source`, `symbol`, `timeframe`, `ts` (bar open, UTC), `open`, `high`, `low`, `close`, `volume` |
 | `daily`, `hourly`, `minute` | Dukascopy bars by timeframe (raw `daily` includes short Sunday sessions) |
-| `daily_session` | **Use this for daily analysis:** clean trading days built from hourly bars (Gold: New York 5pm close; UK100: London day) |
-| `ig_daily` | IG daily bars (mid prices) |
+| `daily_session` | Clean trading days built from hourly bars (Gold: New York 5pm close; UK100: London day to midnight, which includes the US afternoon) |
+| `uk100_cash` | **Use this for FTSE 100 daily research:** London cash session 08:00–16:35 from Dukascopy minute bars, LSE trading days only, from 2015, with the official close alongside (H-000) |
+| `ig_daily` | IG daily bars (mid prices); stamped at London midnight, and the close is an evening price |
 | `coverage` | What's stored: bars, first and last date per market and timeframe |
 | `instruments` | Each market: asset class, trading-day calendar, typical IG spread |
 | `state_daily`, `state_monthly`, `vol_state`, `h1_signals`, `market_now` | Research layers: trend state, Bollinger stretch, volatility state, H1a signals |
