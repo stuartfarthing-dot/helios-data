@@ -121,3 +121,25 @@ def test_intraday_backfill_then_top_up(con):
     ib.update_intraday(con, fake2, "ISF", now=now, pause=0)
     assert fake2.calls == [("", "3 D")]               # top-up: 1 day since the last bar + 2 margin
     assert con.execute("SELECT count(*) FROM bars WHERE timeframe='5m'").fetchone()[0] == 9
+
+
+def test_intraday_views_rvol_by_slot(con):
+    import pandas as pd
+    # 22 days of two 5-minute bars (08:00, 08:05 London = UTC in November) for 10 heavyweights
+    days = pd.bdate_range("2026-10-15", periods=22)
+    names = ["AZN", "HSBA", "ULVR", "BP", "RIO", "GSK", "REL", "BATS", "DGE", "BARC"]
+    for k, name in enumerate(names):
+        ts, vol = [], []
+        for i, d in enumerate(days):
+            for m in (0, 5):
+                ts.append(pd.Timestamp(d.year, d.month, d.day, 8, m, tz="UTC"))
+                vol.append(300.0 if (i == len(days) - 1 and m == 0) else 100.0)   # last day 08:00: 3x normal
+        df = pd.DataFrame({"ts": ts, "open": 100.0, "high": 100.0, "low": 100.0, "close": 100.0, "volume": vol})
+        db.write_bars(con, "ibkr", f"{name}.L", "5m", df)
+    last = days[-1].date()
+    r = con.execute("SELECT rvol FROM intraday_5m WHERE symbol='AZN.L' AND session_date=? AND slot='08:00'",
+                    [last]).fetchone()[0]
+    assert r == 3.0
+    row = con.execute("SELECT shares, rvol FROM uk_intraday_5m WHERE session_date=? AND slot='08:00'",
+                      [last]).fetchone()
+    assert row == (10, 3.0)

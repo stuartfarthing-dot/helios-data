@@ -318,6 +318,41 @@ SELECT c.session_date, c.source, c.shares, c.up, c.down,
   c.traded_gbp_m, c.turnover_vs_20d,
   round(100 * (r.ftse_close / r.ftse_prev - 1), 2) AS ftse_change_pct
 FROM c JOIN ref r USING (session_date);
+
+-- Intraday (18 Nov 2026, short-term testing regime): IBKR 5-minute bars, LSE hours 08:00-16:35 London.
+-- rvol = volume / median volume of the same 5-minute slot over the previous 20 days (median, not mean,
+-- because block trades skew the mean). The ETFs (ISF, CSPX, SGLN) trade in lumps - about a fifth of their
+-- bars are empty - so uk_intraday_5m measures FTSE participation from the 15 heavyweight shares instead.
+-- IBKR's regular-hours bars stop at 16:30: the closing auction is not in this data.
+CREATE OR REPLACE VIEW intraday_5m AS
+WITH b AS (
+  SELECT symbol, ts, timezone('Europe/London', ts AT TIME ZONE 'UTC') AS tl, open, high, low, close, volume
+  FROM bars WHERE source = 'ibkr' AND timeframe = '5m'),
+s AS (
+  SELECT *, CAST(tl AS DATE) AS session_date, strftime(tl, '%H:%M') AS slot
+  FROM b WHERE strftime(tl, '%H:%M') BETWEEN '08:00' AND '16:35')
+SELECT symbol, session_date, slot, ts, open, high, low, close, volume,
+  round(volume / nullif(median(volume) OVER (PARTITION BY symbol, slot ORDER BY ts
+        ROWS BETWEEN 20 PRECEDING AND 1 PRECEDING), 0), 2) AS rvol,
+  round(100 * (close / lag(close) OVER (PARTITION BY symbol ORDER BY ts) - 1), 3) AS ret_pct
+FROM s;
+
+CREATE OR REPLACE VIEW uk_intraday_5m AS
+WITH h AS (
+  SELECT session_date, slot, ts, symbol, close * volume / 100 AS traded_gbp, ret_pct
+  FROM intraday_5m
+  WHERE symbol IN ('AZN.L','RDSB.L','HSBA.L','ULVR.L','BP.L','RIO.L','GSK.L','REL.L','BATS.L','LSE.L',
+                   'DGE.L','BARC.L','LLOY.L','NG.L','RR.L')),
+a AS (
+  SELECT session_date, slot, ts, count(*) AS shares, sum(traded_gbp) AS traded_gbp,
+    avg(ret_pct) AS avg_ret_pct, count(*) FILTER (WHERE ret_pct > 0) AS up, count(*) FILTER (WHERE ret_pct < 0) AS down
+  FROM h GROUP BY session_date, slot, ts HAVING count(*) >= 10)
+SELECT session_date, slot, ts, shares, round(traded_gbp / 1e6, 3) AS traded_gbp_m,
+  round(traded_gbp / nullif(median(traded_gbp) OVER (PARTITION BY slot ORDER BY ts
+        ROWS BETWEEN 20 PRECEDING AND 1 PRECEDING), 0), 2) AS rvol,
+  round(avg_ret_pct, 3) AS avg_ret_pct, up, down,
+  round(sum(avg_ret_pct) OVER (PARTITION BY session_date ORDER BY ts), 3) AS day_ret_pct
+FROM a;
 """
 
 
