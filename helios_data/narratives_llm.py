@@ -1,4 +1,4 @@
-"""MR-10 method "llm-1.0": a small Claude model reads each headline and assigns narratives.
+"""MR-10 method "llm-1.1": a small Claude model reads each headline and assigns narratives.
 
 Runs alongside the rule-based method (rules-1.x); both are stored side by side under their own
 method_version, so they can be compared and neither overwrites the other.
@@ -42,7 +42,7 @@ from . import narratives as nar
 
 log = logging.getLogger("narratives_llm")
 
-METHOD_VERSION = "llm-1.0"
+METHOD_VERSION = "llm-1.1"   # 1.1 (19 Nov 2026): narrative list gains energy_supply_shock; llm-1.0 rows kept
 MODEL = "claude-haiku-5-5"
 API_URL = "https://api.anthropic.com/v1/messages"
 BATCH = 40                                   # headlines per call
@@ -267,11 +267,11 @@ def run(con, now: datetime | None = None, key: str | None = None, max_items: int
     key = key or os.getenv("ANTHROPIC_API_KEY")
     init(con, now)
     if not key:
-        log.info("ANTHROPIC_API_KEY not set - llm-1.0 skipped")
+        log.info("ANTHROPIC_API_KEY not set - %s skipped", METHOD_VERSION)
         return None
     stats = classify_new(con, now, key, max_items or int(os.getenv("LLM_MAX_ITEMS", "3000")),
                          float(os.getenv("LLM_MONTHLY_USD", "10")), call=call)
-    log.info("llm-1.0: %d items in %d calls, $%.4f this run, $%.2f this month", stats["items"], stats["calls"],
+    log.info("%s: %d items in %d calls, $%.4f this run, $%.2f this month", METHOD_VERSION, stats["items"], stats["calls"],
              stats["cost"], month_spend(con, now))
     days = nar.pending_days(con, now, METHOD_VERSION)
     nar.compute_days(con, now, days, METHOD_VERSION)

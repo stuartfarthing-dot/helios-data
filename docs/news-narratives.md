@@ -41,6 +41,12 @@ A missing GDELT file, a failed feed or a missing key is written to `news.collect
 | `narrative_daily_latest` (view) | Latest computation of each day |
 | `narrative_now` (view) | Latest observation of every narrative, for the Macro Pressure Map |
 
+## Versions `rules-1.2` and `llm-1.1` (19 Nov 2026)
+
+Both add one narrative, **energy_supply_shock** (oil and energy supply shock: supply disrupted or threatened by shipping routes, blockades, attacks or production cuts, or energy prices spiking because of it). Stuart's blind check of 100 headlines (Q8.1) found the list had no home for these stories. Everything else is unchanged. The new versions reclassify every stored headline; the `rules-1.1` and `llm-1.0` rows are kept.
+
+The same check decided between the methods: where they disagreed, Claude's labels were judged right in 52 of 60 decided cases and the rules in 8, so `llm-1.1` is the method of record for research; the rules stay as a free cross-check.
+
 ## Method `rules-1.1`
 
 `rules-1.0` (12 Nov 2026) is identical except for one rule. In 1.0, *geopolitical risk* matched any war or conflict word, so general world news gave it 20–29% prevalence in the NYT backfill. In 1.1 it also needs a market or economic word (oil, markets, investors, prices…). The `rules-1.0` rows are kept for reference.

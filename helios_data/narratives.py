@@ -1,6 +1,6 @@
 """MR-10 narratives: classify stored headlines into market narratives and measure them each day.
 
-Method "rules-1.1" (transparent, no paid services; 1.0 differed only in the geopolitical_risk rule):
+Method "rules-1.2" (transparent, no paid services; 1.2 added energy_supply_shock, 1.1 tightened geopolitical_risk):
   * A fixed starting set of narratives (NARRATIVES). Each has two or three word groups; a headline
     (plus its permitted summary) belongs to the narrative only if it matches at least one term from
     EVERY group, e.g. Fed easing = {Fed words} AND {cut / easing words}.
@@ -40,12 +40,13 @@ import pandas as pd
 
 log = logging.getLogger("narratives")
 
-METHOD_VERSION = "rules-1.1"   # 1.1 (12 Nov 2026): geopolitical_risk needs market context. rules-1.0 rows are kept.
+METHOD_VERSION = "rules-1.2"   # 1.2 (19 Nov 2026): adds energy_supply_shock. 1.1 (12 Nov): geopolitical_risk needs
+                               # market context. Rows of earlier versions are kept.
 MIN_STORIES = 5            # a family needs this many relevant stories on a day to count
 ACTIVE_PREV = 0.02         # prevalence threshold for "active"
 CORE_FAMILIES = ("guardian", "nyt")
 
-# ---------------------------------------------------------------- taxonomy (method rules-1.1)
+# ---------------------------------------------------------------- taxonomy (method rules-1.2)
 
 FED = ["fed", "federal reserve", "fomc", "us central bank", "fed chair", "fed's"]
 BOE = ["bank of england", "boe", "monetary policy committee", "threadneedle street"]
@@ -189,6 +190,17 @@ NARRATIVES = [
                  ["market*", "stock*", "shares", "investor*", "oil", "crude", "brent", "gas price*", "gold",
                   "bond*", "yield*", "dollar", "currenc*", "econom*", "inflation", "prices", "supply chain*",
                   "shipping", "trade", "exports", "imports", "energy", "commodit*", "safe haven", "risk"]]),
+    # rules-1.2 (19 Nov 2026): Stuart's headline check (Q8.1) flagged oil and fuel supply stories (Hormuz, diesel,
+    # tankers, the Red Sea) as a narrative of their own that the list was missing.
+    dict(id="energy_supply_shock", title="Oil and energy supply shock",
+         description="Oil, gas or fuel supply disrupted or threatened (shipping routes, blockades, attacks, production "
+                     "cuts) or energy prices spiking because of it.",
+         countries="global", assets="oil,gas,inflation,equities",
+         groups=[["oil", "crude", "brent", "wti", "diesel", "petrol", "gasoline", "fuel*", "lng", "natural gas",
+                  "gas price*", "gas suppl*", "energy price*", "energy suppl*", "tanker*", "opec*", "refiner*"],
+                 ["suppl*", "shortage*", "disrupt*", "blockade*", "strait", "hormuz", "red sea", "shipping",
+                  "spike*", "jump*", "surge*", "soar*", "record", "new high", "embargo*", "outage*", "attack*",
+                  "output cut*", "production cut*", "rationing"]]),
 ]
 
 # Broad vocabulary that makes a headline "relevant" market / economic coverage (the denominator).

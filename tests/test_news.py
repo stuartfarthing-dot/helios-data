@@ -332,13 +332,13 @@ def test_llm_runs_alongside_rules_and_measures(con):
     assert "Fed easing cycle" in md
     n_items = con.execute("SELECT count(*) FROM news.items").fetchone()[0]
     by_mv = dict(con.execute("SELECT method_version, count(*) FROM news.item_class GROUP BY 1").fetchall())
-    assert by_mv == {nar.METHOD_VERSION: n_items, "llm-1.0": n_items}
+    assert by_mv == {nar.METHOD_VERSION: n_items, "llm-1.1": n_items}
     assert len(call.calls) == -(-n_items // llm.BATCH)
     assert not con.execute("SELECT count(*) FROM news.item_narratives WHERE narrative_id='made_up'").fetchone()[0]
     assert con.execute("SELECT count(*) FROM news.narrative_suggestions").fetchone()[0] == 20   # one Oil story a day, two families
     calls = con.execute("SELECT count(*), sum(cost_usd) FROM news.llm_calls").fetchone()
     assert calls[1] == pytest.approx(calls[0] * (2000 * 0.10 + 800 * 0.50 + 1500 * 0.01) / 1e6)
-    p = con.execute("""SELECT prevalence FROM news.narrative_daily_latest WHERE method_version='llm-1.0'
+    p = con.execute("""SELECT prevalence FROM news.narrative_daily_latest WHERE method_version='llm-1.1'
                        AND narrative_id='fed_easing' ORDER BY obs_date DESC LIMIT 1""").fetchone()[0]
     assert p == pytest.approx(0.1)
     # nothing is asked twice
@@ -352,9 +352,9 @@ def test_llm_budget_and_partial_answers(con):
     skip = fake_claude(lambda n, line: None if n % 5 == 0 else label(n, line))
     llm.run(con, now=NOW, key="k", call=skip)
     left = con.execute("""SELECT count(*) FROM news.items i WHERE NOT EXISTS (SELECT 1 FROM news.item_class c
-                          WHERE c.item_id=i.item_id AND c.method_version='llm-1.0')""").fetchone()[0]
+                          WHERE c.item_id=i.item_id AND c.method_version='llm-1.1')""").fetchone()[0]
     assert left > 0
-    assert not con.execute("SELECT count(*) FROM news.narrative_daily WHERE method_version='llm-1.0'").fetchone()[0]
+    assert not con.execute("SELECT count(*) FROM news.narrative_daily WHERE method_version='llm-1.1'").fetchone()[0]
     # budget reached: no further calls this month
     con.execute("UPDATE news.llm_calls SET cost_usd = 50")
     n_before = len(skip.calls)
@@ -365,7 +365,7 @@ def test_llm_budget_and_partial_answers(con):
 def test_llm_skipped_without_key(con, monkeypatch):
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     assert llm.run(con, now=NOW) is None
-    assert con.execute("SELECT count(*) FROM news.methods WHERE method_version='llm-1.0'").fetchone()[0] == 1
+    assert con.execute("SELECT count(*) FROM news.methods WHERE method_version='llm-1.1'").fetchone()[0] == 1
 
 
 def test_late_data_triggers_a_new_measurement_not_an_overwrite(con):
