@@ -103,10 +103,12 @@ MAX_HOLD = {"B": 20, "C2": 100}
 
 # Latest time an entry may still be sent for a signal on session D: the next session's open, so a late data
 # update never turns into a late entry. (tz, hour, minute, days after D: 0 = same day, 1 = next weekday)
-# US indices and metals: the Helios day ends 17:00 New York and the market reopens 18:00.
+# US indices and metals: the Helios day ends 17:00 New York and the market reopens 18:00. These trade nearly
+# 24 hours, so entries are allowed until 19:30 New York (90 minutes after the reopen; Stuart, 19 Nov 2026) -
+# one late or skipped hourly run must not lose the trade. The fill vs the reopen price is in the trade log.
 # Japan 225 and Hang Seng: the Helios day ends 16:00 Tokyo / 17:00 HK, then the evening session starts.
 # Europe and Australia: the Helios day is the local date; the deadline is the next cash open.
-NY = ("America/New_York", 18, 0, 0)
+NY = ("America/New_York", 19, 30, 0)
 ENTRY_DEADLINE = {
     "US500": NY, "NAS100": NY, "US30": NY, "XAUUSD": NY, "XAGUSD": NY, "XPTUSD": NY,
     "JPN225": ("Asia/Tokyo", 16, 30, 0), "HK50": ("Asia/Hong_Kong", 17, 15, 0),

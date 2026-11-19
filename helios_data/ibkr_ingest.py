@@ -15,6 +15,7 @@ Settings come from .env (all optional): IBKR_HOST (127.0.0.1), IBKR_PORT (4001),
     python -m helios_data.ibkr_ingest --symbols HSBA BP    # just these
     python -m helios_data.ibkr_ingest --intraday           # 5-minute bars for INTRADAY (two years first time)
     python -m helios_data.ibkr_ingest --intraday --symbols ISF SGLN
+    python -m helios_data.ibkr_ingest --intraday --backfill-years 5   # extend 5-minute history back to 5 years
 
 Stored in `bars` as source 'ibkr', symbol '<ticker>.L', timeframe '1d', ts = trading date (UTC midnight),
 prices in pence (as IBKR's API returns them, matching the Dukascopy UK shares), volume = shares traded on the LSE.
@@ -56,7 +57,8 @@ INTRADAY = {
 }
 ETFS = {"ISF", "CSPX", "SGLN"}   # London-listed funds sit on IBKR's LSEETF exchange, not LSE
 INTRADAY_YEARS = 2
-INTRADAY_CHUNK = "1 M"      # one request per month of 5-minute bars
+INTRADAY_CHUNK = "1 M"
+RETRIES, RETRY_WAIT = 3, 120       # IBKR's servers go quiet in maintenance windows (about 23:00 and 04:00 UK)      # one request per month of 5-minute bars
 
 # Helios ticker -> current LSE symbol at IBKR, where they differ. Anything not listed is tried as-is,
 # then with a trailing dot (IBKR writes two-letter LSE tickers such as BP and RR as "BP." and "RR.").
@@ -213,6 +215,43 @@ def update_intraday(con, client, ticker: str, currency: str = "GBP", now: dateti
     return total
 
 
+def backfill_intraday(con, client, ticker: str, currency: str = "GBP", years: int = 5,
+                      now: datetime | None = None, pause: float = PAUSE_SECONDS) -> int:
+    """Extend existing 5-minute history further back, month by month, until `years` is covered or IBKR has
+    nothing older. Safe to re-run: it starts from the earliest bar already stored."""
+    now = now or datetime.now(timezone.utc)
+    contract = client.contract(ticker, currency)
+    if contract is None:
+        log.warning("%s: no London %s contract at IBKR - skipped", ticker, currency)
+        return 0
+    symbol, note = f"{ticker}.L", f"{contract.symbol} conId {contract.conId} 5m backfill"
+    first = con.execute("SELECT min(ts) FROM bars WHERE source = ? AND symbol = ? AND timeframe = '5m'",
+                        [SOURCE, symbol]).fetchone()[0]
+    if first is None:
+        return update_intraday(con, client, ticker, currency, now=now, pause=pause)
+    target = pd.Timestamp(now).tz_convert("UTC") - pd.DateOffset(years=years)
+    end, total = pd.Timestamp(first).tz_localize("UTC"), 0
+    while end > target:
+        df = pd.DataFrame()
+        for attempt in range(RETRIES + 1):          # an empty answer is often a timeout, not the end of data
+            df = intraday_frame(client.intraday_bars(contract, end.strftime("%Y%m%d-%H:%M:%S"), INTRADAY_CHUNK))
+            df = df[df["ts"] < end] if not df.empty else df
+            if not df.empty:
+                break
+            if attempt < RETRIES and pause:
+                log.info("%s 5m: no answer for the month before %s - retrying in %ds", ticker, end.date(),
+                         RETRY_WAIT)
+                time.sleep(RETRY_WAIT)
+        if df.empty:
+            log.info("%s 5m: IBKR has nothing before %s (after %d tries)", ticker, end.date(), RETRIES + 1)
+            break
+        total += db.write_bars(con, SOURCE, symbol, "5m", df, note=note)
+        end = df["ts"].min()
+        if pause:
+            time.sleep(pause)
+    return total
+
+
 def test(client) -> None:
     """Check access on one share without writing anything."""
     contract = client.contract("HSBA")
@@ -237,6 +276,8 @@ def main(argv=None):
     p.add_argument("--symbols", nargs="*", default=list(UK_SHARES), help="Helios UK tickers (default: all UK_SHARES)")
     p.add_argument("--test", action="store_true", help="check access with one share; write nothing")
     p.add_argument("--intraday", action="store_true", help="5-minute bars for INTRADAY instead of daily bars")
+    p.add_argument("--backfill-years", type=int, metavar="N",
+                   help="with --intraday: extend the 5-minute history back to N years (e.g. 5)")
     args = p.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
 
@@ -253,7 +294,10 @@ def main(argv=None):
                 if i:
                     time.sleep(PAUSE_SECONDS)
                 try:
-                    n = update_intraday(con, client, ticker, INTRADAY.get(ticker, "GBP"))
+                    if args.backfill_years:
+                        n = backfill_intraday(con, client, ticker, INTRADAY.get(ticker, "GBP"), args.backfill_years)
+                    else:
+                        n = update_intraday(con, client, ticker, INTRADAY.get(ticker, "GBP"))
                     log.info("%s 5m: %d bars written (%d/%d)", ticker, n, i + 1, len(wanted))
                 except Exception as exc:
                     log.warning("%s 5m: failed (%s)", ticker, exc)

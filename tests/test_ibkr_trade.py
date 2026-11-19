@@ -145,8 +145,8 @@ def test_record_and_apply_fills(con):
 
 
 def test_entry_deadlines():
-    # US/metals: same day 18:00 New York (23:00 UTC in November); Europe: next weekday's cash open
-    assert tr.entry_deadline("US500", date(2026, 11, 17)) == pd.Timestamp("2026-11-17 23:00", tz="UTC")
+    # US/metals: same day 19:30 New York (00:30 UTC next day in November); Europe: next weekday's cash open
+    assert tr.entry_deadline("US500", date(2026, 11, 17)) == pd.Timestamp("2026-11-18 00:30", tz="UTC")
     assert tr.entry_deadline("UK100", date(2026, 11, 20)) == pd.Timestamp("2026-11-23 08:00", tz="UTC")  # Fri->Mon
     assert tr.entry_deadline("JPN225", date(2026, 11, 18)) == pd.Timestamp("2026-11-18 07:30", tz="UTC")
     assert tr.entry_deadline("BTCUSD", date(2026, 11, 18)) is None
