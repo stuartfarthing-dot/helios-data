@@ -36,3 +36,8 @@ jobs:
           ARGS=""
           if [ -n "${{ inputs.only }}" ]; then ARGS="--only ${{ inputs.only }}"; fi
           python -m helios_data.events_ingest $ARGS
+                - name: FRED macro series (credit spreads, rates, financial stress)
+        continue-on-error: true
+        env:
+          FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+        run: python -m helios_data.fred_ingest
