@@ -214,6 +214,12 @@ def update_dividends(con, tickers=None, fetch=fetch_dividends, pause: float = 1.
 # ^FTSE (official FTSE 100 close, London session) is the trading calendar and reference for uk100_cash (H-000).
 YAHOO_DAILY = ["GDX", "GDXJ", "SIL", "SILJ", "GLD", "SLV", "^FTSE"]
 
+# Futures (19 Nov 2026, Q10.2): real exchange volume for the CFD markets, which Dukascopy only gives as
+# tick counts (a weak proxy: see 'Volume checks with real exchange volume'). Yahoo's "=F" series follow
+# the front contract, so volume dips around each roll; compare volume with its own recent median and
+# treat roll weeks with care. COMEX/NYMEX metals and energy, CME equity indices.
+YAHOO_FUTURES = ["GC=F", "SI=F", "PL=F", "HG=F", "BZ=F", "CL=F", "ES=F", "NQ=F", "YM=F", "RTY=F"]
+
 
 def _fetch_yahoo_history(ticker: str):
     import yfinance as yf
@@ -232,7 +238,7 @@ def fetch_yahoo_daily(ticker: str, timeout: float = 60):
 def update_yahoo_daily(con, tickers=None, fetch=fetch_yahoo_daily) -> dict:
     from . import db
     out = {}
-    for t in tickers or YAHOO_DAILY:
+    for t in tickers or (YAHOO_DAILY + YAHOO_FUTURES):
         try:
             h = fetch(t)
         except Exception as exc:
@@ -257,7 +263,8 @@ def main(argv=None):
     from . import db
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--only", choices=["calendar", "dividends", "etfs"])
-    p.add_argument("--symbols", nargs="*", help="UK share tickers without .L (default: all)")
+    p.add_argument("--symbols", nargs="*", help="UK share tickers without .L (default: all); with --only etfs, "
+                   "Yahoo tickers (default: all ETFs, ^FTSE and futures)")
     args = p.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
     con = db.connect()
@@ -265,7 +272,7 @@ def main(argv=None):
     if args.only in (None, "calendar"):
         update_calendar(con)
     if args.only in (None, "etfs"):
-        update_yahoo_daily(con)
+        update_yahoo_daily(con, args.symbols if args.only == "etfs" else None)
     if args.only == "dividends":
         res = update_dividends(con, args.symbols)
         if res["got"] == 0:
