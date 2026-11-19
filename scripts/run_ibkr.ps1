@@ -7,6 +7,7 @@ Set-Location $repo
 New-Item -ItemType Directory -Force -Path "$repo\logs" | Out-Null
 $log = "$repo\logs\ibkr_$(Get-Date -Format yyyy-MM-dd).log"
 $python = "$repo\.venv\Scripts\python.exe"
+$env:IBKR_CLIENT_ID = "18"   # manual runs use 17 (the default), so a long manual backfill cannot lock this task out
 "=== $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') start ===" | Out-File -Append -Encoding utf8 $log
 & $python -m helios_data.ibkr_ingest 2>&1 | ForEach-Object { "$_" } | Out-File -Append -Encoding utf8 $log
 $code = $LASTEXITCODE

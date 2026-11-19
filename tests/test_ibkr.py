@@ -143,3 +143,41 @@ def test_intraday_views_rvol_by_slot(con):
     row = con.execute("SELECT shares, rvol FROM uk_intraday_5m WHERE session_date=? AND slot='08:00'",
                       [last]).fetchone()
     assert row == (10, 3.0)
+
+
+def test_intraday_backfill_extends_back_from_earliest_bar(con):
+    now = datetime(2026, 11, 18, 18, 0, tzinfo=timezone.utc)
+    ib.update_intraday(con, FakeIntraday([date(2026, 11, 17)]), "ISF", now=now, pause=0)
+    older = FakeIntraday([date(2026, 11, 12), date(2026, 11, 13)])
+    n = ib.backfill_intraday(con, older, "ISF", years=5, now=now, pause=0)
+    assert n == 6 and older.calls[0][0] == "20261117-08:00:00"     # starts from the earliest stored bar
+    assert con.execute("SELECT min(ts) FROM bars WHERE timeframe='5m'").fetchone()[0] == datetime(2026, 11, 12, 8, 0)
+
+
+def _bare_client(stall_seconds=1200):
+    from helios_data import ibkr_ingest as ii
+    c = object.__new__(ii.IBKR)          # skip __init__: no ib_async connection needed
+    c.stall_seconds, c.last_data, c.empty_run = stall_seconds, ii.time.monotonic(), 0
+    return c
+
+
+def test_track_resets_on_data_and_backs_off(monkeypatch):
+    from helios_data import ibkr_ingest as ii
+    slept = []
+    monkeypatch.setattr(ii.time, "sleep", lambda s: slept.append(s))
+    c = _bare_client()
+    for _ in range(ii.BACKOFF_AFTER):
+        assert c._track([], "X daily") == []
+    assert slept == [ii.RETRY_WAIT] and c.empty_run == 0
+    assert c._track([1], "X daily") == [1] and c.empty_run == 0
+
+
+def test_track_stops_after_long_silence(monkeypatch):
+    import pytest
+    from helios_data import ibkr_ingest as ii
+    monkeypatch.setattr(ii.time, "sleep", lambda s: None)
+    c = _bare_client(stall_seconds=60)
+    c.last_data -= 61
+    with pytest.raises(ii.Stalled) as e:
+        c._track([], "LLOY daily")
+    assert "LLOY daily" in str(e.value) and isinstance(e.value, SystemExit)

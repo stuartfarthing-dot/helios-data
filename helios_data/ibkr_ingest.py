@@ -58,7 +58,14 @@ INTRADAY = {
 ETFS = {"ISF", "CSPX", "SGLN"}   # London-listed funds sit on IBKR's LSEETF exchange, not LSE
 INTRADAY_YEARS = 2
 INTRADAY_CHUNK = "1 M"
-RETRIES, RETRY_WAIT = 3, 120       # IBKR's servers go quiet in maintenance windows (about 23:00 and 04:00 UK)      # one request per month of 5-minute bars
+RETRIES, RETRY_WAIT = 3, 120       # IBKR's servers go quiet in maintenance windows (about 23:00 and 04:00 UK)
+STALL_MINUTES = 20                 # no bars at all for this long: stop the run instead of waiting forever
+BACKOFF_AFTER = 3                  # this many empty answers in a row: pause RETRY_WAIT before the next request
+
+
+class Stalled(SystemExit):
+    """Raised when IBKR has returned no data for STALL_MINUTES. A SystemExit, so the per-share
+    'one bad share should not stop the run' handlers do not swallow it."""
 
 # Helios ticker -> current LSE symbol at IBKR, where they differ. Anything not listed is tried as-is,
 # then with a trailing dot (IBKR writes two-letter LSE tickers such as BP and RR as "BP." and "RR.").
@@ -132,6 +139,27 @@ class IBKR:
         self.host = os.getenv("IBKR_HOST", "127.0.0.1")
         self.port = int(os.getenv("IBKR_PORT", "4001"))
         self.client_id = int(os.getenv("IBKR_CLIENT_ID", "17"))
+        self.stall_seconds = STALL_MINUTES * 60
+        self.last_data = time.monotonic()   # time of the last non-empty answer
+        self.empty_run = 0                  # empty answers in a row
+
+    def _track(self, bars, what: str):
+        """Note whether IBKR answered; back off after a run of empty answers; stop if it has gone quiet."""
+        if bars:
+            self.last_data, self.empty_run = time.monotonic(), 0
+            return bars
+        self.empty_run += 1
+        quiet = time.monotonic() - self.last_data
+        if quiet >= self.stall_seconds:
+            raise Stalled(
+                f"STALLED: IBKR has returned no data for {quiet / 60:.0f} minutes (last request: {what}). "
+                "Stopping so the scheduled tasks are not blocked. Everything loaded so far is saved; "
+                "re-run the same command later and it carries on from where it stopped.")
+        if self.empty_run >= BACKOFF_AFTER:
+            log.warning("%d empty answers in a row - pausing %ds to let IBKR recover", self.empty_run, RETRY_WAIT)
+            time.sleep(RETRY_WAIT)
+            self.empty_run = 0
+        return bars
 
     def connect(self):
         try:
@@ -142,7 +170,8 @@ class IBKR:
                             fetchFields=StartupFetch(0))
         except Exception as exc:
             raise SystemExit(
-                f"Could not reach IB Gateway at {self.host}:{self.port} ({exc}).\n"
+                f"Could not reach IB Gateway at {self.host}:{self.port} with client ID {self.client_id} ({exc}).\n"
+                "If another Helios run is still connected with the same client ID, stop it or wait for it.\n"
                 "Start IB Gateway, log in, and check Configure > Settings > API > Settings: "
                 "'Enable ActiveX and Socket Clients' ticked and the port matches IBKR_PORT.") from exc
         self.ib.reqMarketDataType(3)   # use free delayed data where there is no live subscription
@@ -162,14 +191,16 @@ class IBKR:
         return None
 
     def daily_bars(self, contract, duration: str):
-        return self.ib.reqHistoricalData(contract, endDateTime="", durationStr=duration, barSizeSetting="1 day",
+        bars = self.ib.reqHistoricalData(contract, endDateTime="", durationStr=duration, barSizeSetting="1 day",
                                          whatToShow="TRADES", useRTH=True, formatDate=1, timeout=60)
+        return self._track(bars, f"{contract.symbol} daily")
 
 
     def intraday_bars(self, contract, end, duration: str):
         """5-minute TRADES bars, regular hours, ending at `end` ('' = now); dates come back in UTC."""
-        return self.ib.reqHistoricalData(contract, endDateTime=end, durationStr=duration, barSizeSetting="5 mins",
+        bars = self.ib.reqHistoricalData(contract, endDateTime=end, durationStr=duration, barSizeSetting="5 mins",
                                          whatToShow="TRADES", useRTH=True, formatDate=2, timeout=120)
+        return self._track(bars, f"{contract.symbol} 5m to {end or 'now'}")
 
 
 def update(con, client, ticker: str, today: date | None = None) -> int:
@@ -247,6 +278,7 @@ def backfill_intraday(con, client, ticker: str, currency: str = "GBP", years: in
             break
         total += db.write_bars(con, SOURCE, symbol, "5m", df, note=note)
         end = df["ts"].min()
+        log.info("%s 5m: back to %s (%d bars so far)", ticker, pd.Timestamp(end).date(), total)
         if pause:
             time.sleep(pause)
     return total

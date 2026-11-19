@@ -257,6 +257,79 @@ SELECT t1.symbol, t1.exit_rule, t1.signal_date, t1.entry_date, t1.entry, t1.atr,
           AND t0.entry_date IS NOT NULL AND coalesce(t0.exit_date, DATE '9999-12-31') > t1.signal_date) AS skipped
 FROM t t1;
 
+-- H-010 B shadow (forward test from 19 Nov 2026; no orders are sent): each H1a signal on the alert markets
+-- traded as half at the next open (E1) plus an insurance half as a limit 1 x ATR below E1, live 5 sessions.
+-- Shared stop 2.5 x ATR below E1 (so both halves stopped = 1R); then H1a's exits (C2 trail 2 x ATR below the
+-- highest high, 100 sessions; FTSE: first close above the middle band, 20 sessions). r_now is in units of the
+-- live plan's risk (2 x ATR on a full position), comparable with live_trades.r_now.
+CREATE OR REPLACE VIEW h1a_stagger_shadow AS
+WITH alert_markets(symbol, alert_exit) AS (VALUES
+  ('UK100','B'), ('US500','C2'), ('NAS100','C2'), ('US30','C2'), ('GER40','C2'),
+  ('XAUUSD','C2'), ('XAGUSD','C2'), ('COPPER','C2'), ('BRENT','C2'), ('XPTUSD','C2'),
+  ('BTCUSD','C2'), ('ETHUSD','C2'), ('RUT','C2'), ('JPN225','C2'), ('HK50','C2'),
+  ('ESP35','C2'), ('FRA40','C2')
+), b AS (
+  SELECT s.*, lag(s.close) OVER (PARTITION BY s.symbol ORDER BY s.session_date) AS pc
+  FROM state_daily s JOIN alert_markets USING (symbol)
+), d AS (
+  SELECT symbol, session_date, open, high, low, close, ma20 AS middle_band,
+         trend_state > 0 AND bb_z <= -2 AS setup,
+         avg(greatest(high - low, abs(high - pc), abs(low - pc))) OVER (PARTITION BY symbol ORDER BY session_date ROWS 13 PRECEDING) AS atr14,
+         row_number() OVER (PARTITION BY symbol ORDER BY session_date) AS i
+  FROM b
+), s AS (
+  SELECT d.symbol, am.alert_exit AS exit_rule, d.session_date AS signal_date, d.i AS sig_i,
+         n.session_date AS entry_date, n.open AS e1, d.atr14 AS atr
+  FROM d JOIN alert_markets am USING (symbol)
+  LEFT JOIN d n ON n.symbol = d.symbol AND n.i = d.i + 1
+  WHERE d.setup AND d.session_date >= DATE '2026-11-19'
+), p AS (
+  SELECT s.*, x.i - s.sig_i AS k, x.session_date, x.open, x.high, x.low, x.close, x.middle_band,
+         max(x.high) OVER (PARTITION BY s.symbol, s.signal_date ORDER BY x.i ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) AS hh_prev,
+         max(x.high) OVER (PARTITION BY s.symbol, s.signal_date ORDER BY x.i) AS hh_now
+  FROM s JOIN d x ON x.symbol = s.symbol AND x.i > s.sig_i
+), q AS (
+  SELECT *, e1 - atr AS insurance_limit,
+    CASE WHEN exit_rule = 'C2' THEN greatest(e1 - 2.5 * atr, coalesce(hh_prev, e1) - 2 * atr) ELSE e1 - 2.5 * atr END AS stop_today,
+    CASE WHEN exit_rule = 'C2' THEN greatest(e1 - 2.5 * atr, hh_now - 2 * atr) ELSE e1 - 2.5 * atr END AS stop_next
+  FROM p
+), e AS (
+  SELECT *,
+    CASE WHEN low <= stop_today THEN 'stop'
+         WHEN exit_rule = 'B' AND close > middle_band THEN 'middle band'
+         WHEN k >= CASE WHEN exit_rule = 'B' THEN 20 ELSE 100 END THEN 'time limit' END AS how,
+    CASE WHEN low <= stop_today THEN least(open, stop_today) ELSE close END AS px,
+    CASE WHEN k <= 5 AND low <= insurance_limit THEN least(open, insurance_limit) END AS fill2
+  FROM q
+), x AS (
+  SELECT symbol, signal_date,
+    min(k) FILTER (WHERE how IS NOT NULL) AS exit_k,
+    min(session_date) FILTER (WHERE how IS NOT NULL) AS exit_date,
+    arg_min(how, k) FILTER (WHERE how IS NOT NULL) AS exit_how,
+    arg_min(px, k) FILTER (WHERE how IS NOT NULL) AS exit_price,
+    coalesce(min(k) FILTER (WHERE how IS NOT NULL), max(k)) AS sessions_held, arg_max(close, k) AS last_close, arg_max(stop_next, k) AS stop_next
+  FROM e GROUP BY ALL
+), f AS (
+  SELECT e.symbol, e.signal_date,
+    arg_min(e.fill2, e.k) FILTER (WHERE e.fill2 IS NOT NULL AND e.k <= coalesce(x.exit_k, 1e9)) AS insurance_fill,
+    arg_min(e.session_date, e.k) FILTER (WHERE e.fill2 IS NOT NULL AND e.k <= coalesce(x.exit_k, 1e9)) AS insurance_date
+  FROM e JOIN x USING (symbol, signal_date) GROUP BY ALL
+)
+SELECT s.symbol, s.exit_rule, s.signal_date, s.entry_date, s.e1 AS entry_half_1, round(s.e1 - s.atr, 6) AS insurance_limit,
+  f.insurance_date, f.insurance_fill,
+  round(s.e1 - 2.5 * s.atr, 6) AS initial_stop, s.atr,
+  CASE WHEN s.entry_date IS NULL THEN 'new - half at next open'
+       WHEN x.exit_date IS NULL THEN 'open' ELSE 'closed' END AS status,
+  x.exit_date, x.exit_how, x.exit_price,
+  round((0.5 * (coalesce(x.exit_price, x.last_close) - s.e1)
+       + CASE WHEN f.insurance_fill IS NOT NULL THEN 0.5 * (coalesce(x.exit_price, x.last_close) - f.insurance_fill) ELSE 0 END)
+       / (2 * s.atr), 2) AS r_now,
+  CASE WHEN x.exit_date IS NULL THEN x.stop_next END AS stop_for_next_session,
+  x.sessions_held,
+  l.r_now AS live_r_now, l.skipped AS live_skipped
+FROM s LEFT JOIN x USING (symbol, signal_date) LEFT JOIN f USING (symbol, signal_date)
+LEFT JOIN live_trades l ON l.symbol = s.symbol AND l.signal_date = s.signal_date;
+
 -- UK market breadth (18 Nov 2026): one row per LSE trading day from the IBKR share bars (real exchange volume).
 -- share_up = fraction of shares closing higher; ad_line = running advances minus declines;
 -- traded_gbp_m = value traded (pence x shares / 100, in GBP millions); turnover_vs_20d = today's value traded
