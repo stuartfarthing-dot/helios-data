@@ -4,7 +4,7 @@ What it does, in order:
   1. reconcile - reads IBKR's fills since the last run and updates the trade book (`paper_trades`):
                  entries filled, stops hit, exits done.
   2. plan      - reads the same warehouse views the research and the IG alerts use (h1_signals,
-                 h14_signals, h18_signals, daily_session) and works out tonight's actions:
+                 h14_signals_paper, h18_signals, daily_session) and works out tonight's actions:
                    ENTER     new signal on the last completed session -> buy at the next open, stop 2 x ATR
                    MOVE_STOP C2: stop = max(fill - 1R, highest high since entry - 1R), never lowered
                              (B: the stop stays at fill - 1R; first move replaces the provisional stop)
@@ -92,7 +92,8 @@ class System:
 
 H1A_MARKETS = ("UK100", "US500", "NAS100", "US30", "GER40", "XAUUSD", "XAGUSD", "COPPER", "BRENT", "XPTUSD",
                "BTCUSD", "ETHUSD", "RUT", "JPN225", "HK50", "ESP35", "FRA40")      # = live_trades alert markets
-H14_MARKETS = ("UK100", "US500", "NAS100", "US30", "GER40", "AUS200", "XAUUSD", "XAGUSD", "XPTUSD", "ESP35", "FRA40")
+H14_MARKETS = ("UK100", "US500", "NAS100", "US30", "GER40", "AUS200", "XAUUSD", "XAGUSD", "XPTUSD", "ESP35", "FRA40",
+               "JPN225")   # Japan 225: paper only (19 Nov 2026), not in ProRealTime
 
 SYSTEMS = {
     "H1a": System("H1a", H1A_MARKETS, {"UK100": "B"}),
@@ -132,7 +133,7 @@ SIGNALS_SQL = """
 SELECT 'H1a' AS system, symbol, session_date AS signal_date, close, atr14 FROM h1_signals
  WHERE setup AND session_date >= ?
 UNION ALL
-SELECT 'H14', symbol, signal_date, close, atr14 FROM h14_signals WHERE signal_date >= ?
+SELECT 'H14', symbol, signal_date, close, atr14 FROM h14_signals_paper WHERE signal_date >= ?
 UNION ALL
 SELECT 'H18', symbol, signal_date, close, atr14 FROM h18_signals WHERE signal_date >= ?
 """
