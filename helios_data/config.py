@@ -196,9 +196,11 @@ INSTRUMENTS = {
 
 }
 
-# Bonds and FX were taken out of scope by Stuart on 10 Nov 2026: history kept, no nightly updates.
+# FX was taken out of scope by Stuart on 10 Nov 2026: history kept, no nightly updates.
+# Bonds were also switched off on 10 Nov, then switched back on 22 Nov 2026 (Stuart: "keep bond prices
+# in the data warehouse, always useful"). They are data only (e.g. the gold-vs-gilts co-movement); no system trades them.
 for _v in INSTRUMENTS.values():
-    if _v["asset_class"] in ("bond", "fx"):
+    if _v["asset_class"] == "fx":
         _v["active"] = False
 
 # --- UK shares (added 10 Nov 2026) --------------------------------------------------------
