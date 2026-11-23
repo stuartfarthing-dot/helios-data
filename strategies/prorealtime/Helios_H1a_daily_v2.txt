@@ -1,0 +1,163 @@
+// =====================================================================
+// HELIOS H1a v2 - buy the dip in an uptrend          (ProOrder, DAILY chart)
+// v2 (23 Nov 2026): IGNORES WEEKEND BARS. IG's daily charts include a short Sunday
+// (and sometimes Saturday) bar, and ProOrder counts it even when the chart hides it.
+// That made "100 days" about 83 trading days and changed the trend score, bands and ATR
+// (FTSE 20 Nov: score 0.082 with Sunday bars, 0.155 without; research 0.151).
+// v2 keeps its own list of weekday sessions and calculates everything from that list.
+// A weekend bar's high and low are folded into Monday's session. No signal or B-exit
+// decision is taken on a weekend bar; stops and limits are re-issued every bar.
+// The RULE is unchanged (pre-registered 9 Nov 2026). ATR is now a simple 14-session
+// average of true range, as in the research data (v1 used ProRealTime's Wilder ATR).
+//
+// Run one copy per market. Only change the two settings below.
+//   ExitRule = 1  -> B: first close above the middle band, max 20 sessions (FTSE, and H1a-B copies)
+//   ExitRule = 2  -> C2: trailing stop 2 x ATR, max 100 sessions
+//   ExitRule = 3  -> T1: limit at entry + 2 x ATR (+1R), max 100 sessions
+// =====================================================================
+DEFPARAM CumulateOrders = False      // one position at a time
+DEFPARAM PreLoadBars = 600           // about 2 years of bars, enough for 121 weekday sessions
+
+// ---------------- settings ----------------
+ExitRule = 2
+PositionSize = 0.01                  // GBP per point
+// ------------------------------------------
+
+ONCE n = 0                // weekday sessions stored so far
+ONCE wkH = 0
+ONCE wkL = 0
+ONCE haveWk = 0
+ONCE ready = 0
+ONCE score = 0
+ONCE mid = 0
+ONCE lower = 0
+ONCE atr = 0
+ONCE riskdist = 0
+ONCE entryN = 0
+ONCE hh = 0
+
+weekend = (DayOfWeek = 0 OR DayOfWeek = 6)
+newsession = 0
+
+IF weekend THEN
+   // remember the weekend bar's range; it becomes part of Monday's session
+   IF haveWk = 0 THEN
+      wkH = high
+      wkL = low
+      haveWk = 1
+   ELSE
+      wkH = MAX(wkH, high)
+      wkL = MIN(wkL, low)
+   ENDIF
+ELSE
+   h = high
+   l = low
+   IF haveWk = 1 THEN
+      h = MAX(h, wkH)
+      l = MIN(l, wkL)
+      haveWk = 0
+   ENDIF
+   $c[n] = close
+   $h[n] = h
+   $l[n] = l
+   n = n + 1
+   newsession = 1
+ENDIF
+
+// ---------------- indicators, weekday sessions only ----------------
+IF newsession = 1 AND n >= 122 THEN
+   last = n - 1
+   // 100-session average now and 20 sessions ago
+   s0 = 0
+   s20 = 0
+   FOR i = 0 TO 99 DO
+      s0 = s0 + $c[last - i]
+      s20 = s20 + $c[last - 20 - i]
+   NEXT
+   ma100 = s0 / 100
+   ma100b = s20 / 100
+   slope = (ma100 / ma100b - 1) * 100
+   // volatility: SD of the last 100 daily log returns, scaled to 20 sessions
+   sr = 0
+   FOR i = 0 TO 99 DO
+      sr = sr + LOG($c[last - i] / $c[last - i - 1])
+   NEXT
+   mr = sr / 100
+   ss = 0
+   FOR i = 0 TO 99 DO
+      d = LOG($c[last - i] / $c[last - i - 1]) - mr
+      ss = ss + d * d
+   NEXT
+   vol = SQRT(ss / 100) * SQRT(20) * 100
+   IF vol > 0 THEN
+      score = slope / vol
+   ELSE
+      score = 0
+   ENDIF
+   // Bollinger band (20, 2)
+   sm = 0
+   FOR i = 0 TO 19 DO
+      sm = sm + $c[last - i]
+   NEXT
+   mid = sm / 20
+   sv = 0
+   FOR i = 0 TO 19 DO
+      sv = sv + ($c[last - i] - mid) * ($c[last - i] - mid)
+   NEXT
+   lower = mid - 2 * SQRT(sv / 20)
+   // ATR(14): simple average of true range over the last 14 sessions
+   st = 0
+   FOR i = 0 TO 13 DO
+      k = last - i
+      tr = MAX($h[k] - $l[k], MAX(ABS($h[k] - $c[k - 1]), ABS($l[k] - $c[k - 1])))
+      st = st + tr
+   NEXT
+   atr = st / 14
+   ready = 1
+ENDIF
+
+setup = 0
+IF newsession = 1 AND ready = 1 THEN
+   IF score >= 0.15 AND close <= lower THEN
+      setup = 1
+   ENDIF
+ENDIF
+
+// ---------------- entry ----------------
+IF NOT ONMARKET AND setup = 1 THEN
+   riskdist = 2 * atr                // 1R = 2 x ATR at the signal
+   entryN = n
+   hh = 0
+   BUY PositionSize PERPOINT AT MARKET      // fills at the next bar's open
+   SET STOP LOSS riskdist                   // hard stop held by IG from the moment of entry
+ENDIF
+
+// ---------------- management ----------------
+IF ONMARKET THEN
+   IF hh = 0 THEN
+      hh = high
+   ELSE
+      hh = MAX(hh, high)
+   ENDIF
+   barsheld = n - entryN                    // weekday sessions since the signal session
+   entryprice = TRADEPRICE(1)
+
+   IF ExitRule = 3 THEN
+      IF newsession = 1 AND barsheld >= 100 THEN
+         SELL AT MARKET
+      ELSE
+         SELL AT entryprice + riskdist LIMIT
+      ENDIF
+   ELSIF ExitRule = 1 THEN
+      IF newsession = 1 AND (close > mid OR barsheld >= 20) THEN
+         SELL AT MARKET
+      ENDIF
+   ELSE
+      trail = MAX(entryprice - riskdist, hh - riskdist)
+      IF newsession = 1 AND barsheld >= 100 THEN
+         SELL AT MARKET
+      ELSE
+         SELL AT trail STOP
+      ENDIF
+   ENDIF
+ENDIF

@@ -1,0 +1,111 @@
+// =====================================================================
+// HELIOS H18a v2 - metals breakout                   (ProOrder, DAILY chart)
+// v2 (23 Nov 2026): IGNORES WEEKEND BARS (see the H1a v2 notes). The 252-session high
+// and ATR are calculated from the system's own list of weekday sessions; a weekend bar's
+// high and low are folded into Monday. No signal on a weekend bar. Rule unchanged
+// (pre-registered 10 Nov 2026). Spot Gold (DFB) and Spot Silver (DFB) only.
+// Signal: the first daily close at a 252-session closing high, with no such close in the
+// previous 20 sessions. Buy at the next open. Stop 2 x ATR(14).
+// Exit C2: trailing stop 2 x ATR (at the signal) below the highest high since entry,
+// never lowered; or after 100 sessions.
+// =====================================================================
+DEFPARAM CumulateOrders = False
+DEFPARAM PreLoadBars = 800           // about 3 years of bars, enough for 273 weekday sessions
+
+// ---------------- settings ----------------
+PositionSize = 0.01                  // GBP per point
+// ------------------------------------------
+
+ONCE n = 0
+ONCE wkH = 0
+ONCE wkL = 0
+ONCE haveWk = 0
+ONCE riskdist = 0
+ONCE entryN = 0
+ONCE hh = 0
+
+weekend = (DayOfWeek = 0 OR DayOfWeek = 6)
+newsession = 0
+
+IF weekend THEN
+   IF haveWk = 0 THEN
+      wkH = high
+      wkL = low
+      haveWk = 1
+   ELSE
+      wkH = MAX(wkH, high)
+      wkL = MIN(wkL, low)
+   ENDIF
+ELSE
+   h = high
+   l = low
+   IF haveWk = 1 THEN
+      h = MAX(h, wkH)
+      l = MIN(l, wkL)
+      haveWk = 0
+   ENDIF
+   $c[n] = close
+   $h[n] = h
+   $l[n] = l
+   n = n + 1
+   newsession = 1
+ENDIF
+
+setup = 0
+IF newsession = 1 AND n >= 252 THEN
+   last = n - 1
+   hi = $c[last]
+   FOR i = 1 TO 251 DO
+      hi = MAX(hi, $c[last - i])
+   NEXT
+   IF $c[last] >= hi THEN
+      $nh[last] = 1
+   ELSE
+      $nh[last] = 0
+   ENDIF
+   IF n >= 273 AND $nh[last] = 1 THEN
+      recent = 0
+      FOR i = 1 TO 20 DO
+         IF ISSET($nh[last - i]) THEN
+            recent = recent + $nh[last - i]
+         ELSE
+            recent = recent + 1
+         ENDIF
+      NEXT
+      IF recent = 0 THEN
+         setup = 1
+      ENDIF
+   ENDIF
+   st = 0
+   FOR i = 0 TO 13 DO
+      k = last - i
+      st = st + MAX($h[k] - $l[k], MAX(ABS($h[k] - $c[k - 1]), ABS($l[k] - $c[k - 1])))
+   NEXT
+   atr = st / 14
+ENDIF
+
+// ---------------- entry ----------------
+IF NOT ONMARKET AND setup = 1 THEN
+   riskdist = 2 * atr
+   entryN = n
+   hh = 0
+   BUY PositionSize PERPOINT AT MARKET
+   SET STOP LOSS riskdist
+ENDIF
+
+// ---------------- management (C2) ----------------
+IF ONMARKET THEN
+   IF hh = 0 THEN
+      hh = high
+   ELSE
+      hh = MAX(hh, high)
+   ENDIF
+   barsheld = n - entryN
+   entryprice = TRADEPRICE(1)
+   trail = MAX(entryprice - riskdist, hh - riskdist)
+   IF newsession = 1 AND barsheld >= 100 THEN
+      SELL AT MARKET
+   ELSE
+      SELL AT trail STOP
+   ENDIF
+ENDIF

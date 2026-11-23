@@ -1,0 +1,91 @@
+// =====================================================================
+// HELIOS check indicator v2 (ProBuilder indicator, DAILY chart, own panel)
+// Uses exactly the weekday-session method of the v2 systems. Put it on a chart WITH
+// weekend data shown: it should give the same numbers as the research (and as the old
+// Claude Indicator with weekend data hidden).
+// Expected for FTSE 100, Fri 20 Nov 2026: score about 0.15 (chart without weekends 0.155,
+// research 0.151), lower band about 10,414, ATR about 185 (research 185.7).
+// On weekend bars it repeats the last weekday values.
+// =====================================================================
+ONCE n = 0
+ONCE wkH = 0
+ONCE wkL = 0
+ONCE haveWk = 0
+ONCE score = 0
+ONCE lower = 0
+ONCE atr = 0
+ONCE er = 0
+
+weekend = (DayOfWeek = 0 OR DayOfWeek = 6)
+
+IF weekend THEN
+   IF haveWk = 0 THEN
+      wkH = high
+      wkL = low
+      haveWk = 1
+   ELSE
+      wkH = MAX(wkH, high)
+      wkL = MIN(wkL, low)
+   ENDIF
+ELSE
+   h = high
+   l = low
+   IF haveWk = 1 THEN
+      h = MAX(h, wkH)
+      l = MIN(l, wkL)
+      haveWk = 0
+   ENDIF
+   $c[n] = close
+   $h[n] = h
+   $l[n] = l
+   n = n + 1
+   IF n >= 122 THEN
+      last = n - 1
+      s0 = 0
+      s20 = 0
+      FOR i = 0 TO 99 DO
+         s0 = s0 + $c[last - i]
+         s20 = s20 + $c[last - 20 - i]
+      NEXT
+      slope = (s0 / s20 - 1) * 100
+      sr = 0
+      FOR i = 0 TO 99 DO
+         sr = sr + LOG($c[last - i] / $c[last - i - 1])
+      NEXT
+      mr = sr / 100
+      ss = 0
+      FOR i = 0 TO 99 DO
+         d = LOG($c[last - i] / $c[last - i - 1]) - mr
+         ss = ss + d * d
+      NEXT
+      vol = SQRT(ss / 100) * SQRT(20) * 100
+      IF vol > 0 THEN
+         score = slope / vol
+      ENDIF
+      sm = 0
+      FOR i = 0 TO 19 DO
+         sm = sm + $c[last - i]
+      NEXT
+      mid = sm / 20
+      sv = 0
+      FOR i = 0 TO 19 DO
+         sv = sv + ($c[last - i] - mid) * ($c[last - i] - mid)
+      NEXT
+      lower = mid - 2 * SQRT(sv / 20)
+      st = 0
+      FOR i = 0 TO 13 DO
+         k = last - i
+         st = st + MAX($h[k] - $l[k], MAX(ABS($h[k] - $c[k - 1]), ABS($l[k] - $c[k - 1])))
+      NEXT
+      atr = st / 14
+      path = 0
+      FOR i = 0 TO 19 DO
+         path = path + ABS($c[last - i] - $c[last - i - 1])
+      NEXT
+      IF path > 0 THEN
+         er = ($c[last] - $c[last - 20]) / path
+      ENDIF
+   ENDIF
+ENDIF
+
+RETURN score AS "H1a trend score (weekdays)", 0.15 AS "threshold", lower AS "lower band (weekdays)", atr AS "ATR14 (weekdays)", er AS "ER20 (weekdays)"
