@@ -196,11 +196,13 @@ INSTRUMENTS = {
 
 }
 
-# FX was taken out of scope by Stuart on 10 Nov 2026: history kept, no nightly updates.
+# FX was taken out of scope for TRADING by Stuart on 10 Nov 2026. From 24 Nov 2026 GBP/USD and USD/JPY are
+# updated nightly again as DATA only (co-movements: FTSE vs sterling, Nikkei vs yen; board Q14.25).
+# EUR/USD and AUD/USD stay off.
 # Bonds were also switched off on 10 Nov, then switched back on 22 Nov 2026 (Stuart: "keep bond prices
 # in the data warehouse, always useful"). They are data only (e.g. the gold-vs-gilts co-movement); no system trades them.
 for _v in INSTRUMENTS.values():
-    if _v["asset_class"] == "fx":
+    if _v["asset_class"] == "fx" and _v["name"] not in ("GBP/USD", "USD/JPY"):
         _v["active"] = False
 
 # --- UK shares (added 10 Nov 2026) --------------------------------------------------------

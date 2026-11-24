@@ -9,6 +9,10 @@ on:
         description: "calendar, dividends, or blank for both"
         required: false
         default: ""
+      ff_actuals:
+        description: "Actual figures: blank = last 14 days, test = one week (measure cost), backfill = Apr 2025 to today"
+        required: false
+        default: ""
 
 concurrency:
   group: update-events
@@ -36,8 +40,17 @@ jobs:
           ARGS=""
           if [ -n "${{ inputs.only }}" ]; then ARGS="--only ${{ inputs.only }}"; fi
           python -m helios_data.events_ingest $ARGS
-                - name: FRED macro series (credit spreads, rates, financial stress)
+      - name: FRED macro series (credit spreads, rates, financial stress)
         continue-on-error: true
         env:
           FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
         run: python -m helios_data.fred_ingest
+      - name: Economic-calendar actual figures (Forex Factory via Apify, pay per event)
+        continue-on-error: true
+        env:
+          APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
+        run: |
+          ARGS=""
+          if [ "${{ inputs.ff_actuals }}" = "test" ]; then ARGS="--test"; fi
+          if [ "${{ inputs.ff_actuals }}" = "backfill" ]; then ARGS="--backfill"; fi
+          python -m helios_data.ff_actuals_ingest $ARGS
