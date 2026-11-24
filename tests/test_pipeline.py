@@ -249,3 +249,9 @@ def test_gld_holdings_failure_keeps_table(con):
         raise OSError("blocked")
     assert ev.update_gld_holdings(con, fetch=boom) == 0
     assert con.execute("SELECT count(*) FROM gld_holdings").fetchone()[0] == 2
+
+
+def test_gld_holdings_carriage_returns(con):
+    from helios_data import events_ingest as ev
+    con.execute(ev.SCHEMA)
+    assert ev.update_gld_holdings(con, fetch=lambda: GLD_SAMPLE.replace("\n", "\r")) == 2

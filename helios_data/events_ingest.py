@@ -293,6 +293,8 @@ def _num(v):
 def parse_gld_archive(text: str) -> pd.DataFrame:
     import csv
     import io
+    # The archive uses bare carriage returns as line ends in places, which csv rejects.
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
     rows = list(csv.reader(io.StringIO(text)))
     hdr_i = next((i for i, r in enumerate(rows) if r and r[0].strip().lower() == "date"), None)
     if hdr_i is None:
