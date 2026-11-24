@@ -296,10 +296,17 @@ def parse_gld_archive(text: str) -> pd.DataFrame:
     # The archive uses bare carriage returns as line ends in places, which csv rejects.
     text = text.replace("\r\n", "\n").replace("\r", "\n")
     rows = list(csv.reader(io.StringIO(text)))
-    hdr_i = next((i for i, r in enumerate(rows) if r and r[0].strip().lower() == "date"), None)
+    # Header = first row with a "date" cell and a "tonnes" cell (the date column may not come first,
+    # and cells may carry stray spaces or a byte-order mark).
+    def norm(c):
+        return c.replace("\ufeff", "").strip().lower()
+    hdr_i = next((i for i, r in enumerate(rows)
+                  if any(norm(c) == "date" or norm(c).startswith("date") for c in r)
+                  and any("tonnes" in norm(c) for c in r)), None)
     if hdr_i is None:
-        raise ValueError("GLD archive: no header row starting with 'Date'")
-    hdr = [c.strip().lower() for c in rows[hdr_i]]
+        raise ValueError("GLD archive: no header row with Date and Tonnes; file starts: %r" % text[:400])
+    hdr = [norm(c) for c in rows[hdr_i]]
+    di = next(i for i, c in enumerate(hdr) if c == "date" or c.startswith("date"))
 
     def col(*words):
         return next((i for i, c in enumerate(hdr) if all(w in c for w in words)), None)
@@ -311,9 +318,9 @@ def parse_gld_archive(text: str) -> pd.DataFrame:
         raise ValueError("GLD archive: no tonnes column")
     out = []
     for r in rows[hdr_i + 1:]:
-        if len(r) <= ti or not r[0].strip():
+        if len(r) <= max(ti, di) or not r[di].strip():
             continue
-        d = pd.to_datetime(r[0].strip(), format="mixed", dayfirst=True, errors="coerce")
+        d = pd.to_datetime(r[di].strip(), format="mixed", dayfirst=True, errors="coerce")
         t = _num(r[ti])
         if pd.isna(d) or t is None:
             continue           # holiday or footer line

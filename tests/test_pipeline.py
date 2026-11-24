@@ -255,3 +255,10 @@ def test_gld_holdings_carriage_returns(con):
     from helios_data import events_ingest as ev
     con.execute(ev.SCHEMA)
     assert ev.update_gld_holdings(con, fetch=lambda: GLD_SAMPLE.replace("\n", "\r")) == 2
+
+
+def test_gld_holdings_date_not_first(con):
+    from helios_data import events_ingest as ev
+    con.execute(ev.SCHEMA)
+    txt = "﻿note\n x , Date ,Total Net Asset Value Tonnes in the Trust\n,20-Nov-2026,892.68\n,23-Nov-2026,891.12\n"
+    assert ev.update_gld_holdings(con, fetch=lambda: txt) == 2
