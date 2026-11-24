@@ -23,7 +23,7 @@ ExitRule = 2
 PositionSize = 0.01                  // GBP per point
 // ------------------------------------------
 
-ONCE n = 0                // weekday sessions stored so far
+ONCE nS = 0                // weekday sessions stored so far
 ONCE wkH = 0
 ONCE wkL = 0
 ONCE haveWk = 0
@@ -36,7 +36,7 @@ ONCE riskdist = 0
 ONCE entryN = 0
 ONCE hh = 0
 
-weekend = (DayOfWeek = 0 OR DayOfWeek = 6)
+weekend = (OpenDayOfWeek = 0 OR OpenDayOfWeek = 6)   // the bar OPENED on a Saturday or Sunday (IG dates bars by their close, so DayOfWeek cannot be used)
 newsession = 0
 
 IF weekend THEN
@@ -50,67 +50,67 @@ IF weekend THEN
       wkL = MIN(wkL, low)
    ENDIF
 ELSE
-   h = high
-   l = low
+   hiS = high
+   loS = low
    IF haveWk = 1 THEN
-      h = MAX(h, wkH)
-      l = MIN(l, wkL)
+      hiS = MAX(hiS, wkH)
+      loS = MIN(loS, wkL)
       haveWk = 0
    ENDIF
-   $c[n] = close
-   $h[n] = h
-   $l[n] = l
-   n = n + 1
+   $cl[nS] = close
+   $hi[nS] = hiS
+   $lo[nS] = loS
+   nS = nS + 1
    newsession = 1
 ENDIF
 
 // ---------------- indicators, weekday sessions only ----------------
-IF newsession = 1 AND n >= 122 THEN
-   last = n - 1
+IF newsession = 1 AND nS >= 122 THEN
+   lastI = nS - 1
    // 100-session average now and 20 sessions ago
    s0 = 0
    s20 = 0
-   FOR i = 0 TO 99 DO
-      s0 = s0 + $c[last - i]
-      s20 = s20 + $c[last - 20 - i]
+   FOR ii = 0 TO 99 DO
+      s0 = s0 + $cl[lastI - ii]
+      s20 = s20 + $cl[lastI - 20 - ii]
    NEXT
    ma100 = s0 / 100
    ma100b = s20 / 100
    slope = (ma100 / ma100b - 1) * 100
    // volatility: SD of the last 100 daily log returns, scaled to 20 sessions
    sr = 0
-   FOR i = 0 TO 99 DO
-      sr = sr + LOG($c[last - i] / $c[last - i - 1])
+   FOR ii = 0 TO 99 DO
+      sr = sr + LOG($cl[lastI - ii] / $cl[lastI - ii - 1])
    NEXT
    mr = sr / 100
    ss = 0
-   FOR i = 0 TO 99 DO
-      d = LOG($c[last - i] / $c[last - i - 1]) - mr
-      ss = ss + d * d
+   FOR ii = 0 TO 99 DO
+      dv = LOG($cl[lastI - ii] / $cl[lastI - ii - 1]) - mr
+      ss = ss + dv * dv
    NEXT
-   vol = SQRT(ss / 100) * SQRT(20) * 100
-   IF vol > 0 THEN
-      score = slope / vol
+   volS = SQRT(ss / 100) * SQRT(20) * 100
+   IF volS > 0 THEN
+      score = slope / volS
    ELSE
       score = 0
    ENDIF
    // Bollinger band (20, 2)
    sm = 0
-   FOR i = 0 TO 19 DO
-      sm = sm + $c[last - i]
+   FOR ii = 0 TO 19 DO
+      sm = sm + $cl[lastI - ii]
    NEXT
    mid = sm / 20
    sv = 0
-   FOR i = 0 TO 19 DO
-      sv = sv + ($c[last - i] - mid) * ($c[last - i] - mid)
+   FOR ii = 0 TO 19 DO
+      sv = sv + ($cl[lastI - ii] - mid) * ($cl[lastI - ii] - mid)
    NEXT
    lower = mid - 2 * SQRT(sv / 20)
    // ATR(14): simple average of true range over the last 14 sessions
    st = 0
-   FOR i = 0 TO 13 DO
-      k = last - i
-      tr = MAX($h[k] - $l[k], MAX(ABS($h[k] - $c[k - 1]), ABS($l[k] - $c[k - 1])))
-      st = st + tr
+   FOR ii = 0 TO 13 DO
+      kk = lastI - ii
+      trv = MAX($hi[kk] - $lo[kk], MAX(ABS($hi[kk] - $cl[kk - 1]), ABS($lo[kk] - $cl[kk - 1])))
+      st = st + trv
    NEXT
    atr = st / 14
    ready = 1
@@ -126,7 +126,7 @@ ENDIF
 // ---------------- entry ----------------
 IF NOT ONMARKET AND setup = 1 THEN
    riskdist = 2 * atr                // 1R = 2 x ATR at the signal
-   entryN = n
+   entryN = nS
    hh = 0
    BUY PositionSize PERPOINT AT MARKET      // fills at the next bar's open
    SET STOP LOSS riskdist                   // hard stop held by IG from the moment of entry
@@ -139,7 +139,7 @@ IF ONMARKET THEN
    ELSE
       hh = MAX(hh, high)
    ENDIF
-   barsheld = n - entryN                    // weekday sessions since the signal session
+   barsheld = nS - entryN                    // weekday sessions since the signal session
    entryprice = TRADEPRICE(1)
 
    IF ExitRule = 3 THEN

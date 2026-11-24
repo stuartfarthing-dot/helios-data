@@ -17,7 +17,7 @@ DEFPARAM PreLoadBars = 400
 PositionSize = 0.01                  // GBP per point
 // ------------------------------------------
 
-ONCE n = 0
+ONCE nS = 0
 ONCE wkH = 0
 ONCE wkL = 0
 ONCE haveWk = 0
@@ -27,7 +27,7 @@ ONCE atr = 0
 ONCE riskdist = 0
 ONCE entryN = 0
 
-weekend = (DayOfWeek = 0 OR DayOfWeek = 6)
+weekend = (OpenDayOfWeek = 0 OR OpenDayOfWeek = 6)   // the bar OPENED on a Saturday or Sunday (IG dates bars by their close, so DayOfWeek cannot be used)
 newsession = 0
 
 IF weekend THEN
@@ -40,56 +40,56 @@ IF weekend THEN
       wkL = MIN(wkL, low)
    ENDIF
 ELSE
-   h = high
-   l = low
+   hiS = high
+   loS = low
    IF haveWk = 1 THEN
-      h = MAX(h, wkH)
-      l = MIN(l, wkL)
+      hiS = MAX(hiS, wkH)
+      loS = MIN(loS, wkL)
       haveWk = 0
    ENDIF
-   $c[n] = close
-   $h[n] = h
-   $l[n] = l
-   n = n + 1
+   $cl[nS] = close
+   $hi[nS] = hiS
+   $lo[nS] = loS
+   nS = nS + 1
    newsession = 1
 ENDIF
 
 setup = 0
-IF newsession = 1 AND n >= 40 THEN
-   last = n - 1
+IF newsession = 1 AND nS >= 40 THEN
+   lastI = nS - 1
    // Bollinger (20, 2) and z-score
    sm = 0
-   FOR i = 0 TO 19 DO
-      sm = sm + $c[last - i]
+   FOR ii = 0 TO 19 DO
+      sm = sm + $cl[lastI - ii]
    NEXT
    mid = sm / 20
    sv = 0
-   FOR i = 0 TO 19 DO
-      sv = sv + ($c[last - i] - mid) * ($c[last - i] - mid)
+   FOR ii = 0 TO 19 DO
+      sv = sv + ($cl[lastI - ii] - mid) * ($cl[lastI - ii] - mid)
    NEXT
-   sd = SQRT(sv / 20)
-   IF sd > 0 THEN
-      bbz = ($c[last] - mid) / sd
+   sdS = SQRT(sv / 20)
+   IF sdS > 0 THEN
+      bbz = ($cl[lastI] - mid) / sdS
    ELSE
       bbz = 0
    ENDIF
-   $z[last] = bbz
+   $zz[lastI] = bbz
    // 20-session efficiency ratio
    path = 0
-   FOR i = 0 TO 19 DO
-      path = path + ABS($c[last - i] - $c[last - i - 1])
+   FOR ii = 0 TO 19 DO
+      path = path + ABS($cl[lastI - ii] - $cl[lastI - ii - 1])
    NEXT
    IF path > 0 THEN
-      er = ($c[last] - $c[last - 20]) / path
+      er = ($cl[lastI] - $cl[lastI - 20]) / path
    ELSE
       er = 0
    ENDIF
    // true range today and the average of the previous 14 sessions
-   trnow = MAX($h[last] - $l[last], MAX(ABS($h[last] - $c[last - 1]), ABS($l[last] - $c[last - 1])))
+   trnow = MAX($hi[lastI] - $lo[lastI], MAX(ABS($hi[lastI] - $cl[lastI - 1]), ABS($lo[lastI] - $cl[lastI - 1])))
    sp = 0
-   FOR i = 1 TO 14 DO
-      k = last - i
-      sp = sp + MAX($h[k] - $l[k], MAX(ABS($h[k] - $c[k - 1]), ABS($l[k] - $c[k - 1])))
+   FOR ii = 1 TO 14 DO
+      kk = lastI - ii
+      sp = sp + MAX($hi[kk] - $lo[kk], MAX(ABS($hi[kk] - $cl[kk - 1]), ABS($lo[kk] - $cl[kk - 1])))
    NEXT
    atrprev = sp / 14
    IF atrprev > 0 THEN
@@ -98,18 +98,18 @@ IF newsession = 1 AND n >= 40 THEN
       shock = 0
    ENDIF
    // ATR as in the backtest: simple average of the last 14 true ranges (including today)
-   atr = (sp - MAX($h[last - 14] - $l[last - 14], MAX(ABS($h[last - 14] - $c[last - 15]), ABS($l[last - 14] - $c[last - 15]))) + trnow) / 14
+   atr = (sp - MAX($hi[lastI - 14] - $lo[lastI - 14], MAX(ABS($hi[lastI - 14] - $cl[lastI - 15]), ABS($lo[lastI - 14] - $cl[lastI - 15]))) + trnow) / 14
    // consecutive down closes
-   IF $c[last] < $c[last - 1] THEN
+   IF $cl[lastI] < $cl[lastI - 1] THEN
       streak = streak + 1
    ELSE
       streak = 0
    ENDIF
    // closes at or above +1.5 SD in the last 10 sessions
    upperdays = 0
-   FOR i = 0 TO 9 DO
-      IF ISSET($z[last - i]) THEN
-         IF $z[last - i] >= 1.5 THEN
+   FOR ii = 0 TO 9 DO
+      IF ISSET($zz[lastI - ii]) THEN
+         IF $zz[lastI - ii] >= 1.5 THEN
             upperdays = upperdays + 1
          ENDIF
       ENDIF
@@ -117,15 +117,15 @@ IF newsession = 1 AND n >= 40 THEN
    panic = (bbz <= -2 AND (shock >= 2 OR streak >= 4))
    euphoria = (bbz >= 2 AND upperdays >= 4)
    IF (NOT panic) AND (NOT euphoria) AND er <= -0.35 THEN
-      $ps[last] = 1
+      $pss[lastI] = 1
    ELSE
-      $ps[last] = 0
+      $pss[lastI] = 0
    ENDIF
    prevps = 0
-   IF ISSET($ps[last - 1]) THEN
-      prevps = $ps[last - 1]
+   IF ISSET($pss[lastI - 1]) THEN
+      prevps = $pss[lastI - 1]
    ENDIF
-   IF $ps[last] = 1 AND prevps = 0 THEN
+   IF $pss[lastI] = 1 AND prevps = 0 THEN
       setup = 1
    ENDIF
 ENDIF
@@ -133,15 +133,15 @@ ENDIF
 // ---------------- entry ----------------
 IF NOT ONMARKET AND setup = 1 THEN
    riskdist = 2 * atr
-   entryN = n
+   entryN = nS
    BUY PositionSize PERPOINT AT MARKET
    SET STOP LOSS riskdist
 ENDIF
 
 // ---------------- exit B ----------------
 IF ONMARKET AND newsession = 1 THEN
-   barsheld = n - entryN
-   IF $c[n - 1] > mid OR barsheld >= 20 THEN
+   barsheld = nS - entryN
+   IF $cl[nS - 1] > mid OR barsheld >= 20 THEN
       SELL AT MARKET
    ENDIF
 ENDIF
