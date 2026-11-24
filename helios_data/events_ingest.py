@@ -14,7 +14,8 @@ Two feeds, both free and key-less:
 policy_events (BoE / Fed / ECB decisions, UK Budgets) is a curated table maintained by hand in the
 warehouse; it is not touched here.
 
-    python -m helios_data.events_ingest                 # calendar + ETF daily prices (the nightly default)
+    python -m helios_data.events_ingest                 # calendar + ETF daily prices + GLD tonnes (nightly)
+    python -m helios_data.events_ingest --only etfs     # ETF/futures prices and GLD tonnes only
     python -m helios_data.events_ingest --only dividends --symbols BP VOD
 
 UK shares were taken out of scope on 10 Nov 2026, so dividends are no longer refreshed nightly;
@@ -59,6 +60,10 @@ CREATE TABLE IF NOT EXISTS econ_calendar (
 CREATE TABLE IF NOT EXISTS dividends (
   symbol VARCHAR, yahoo_symbol VARCHAR, ex_date DATE, amount DOUBLE,
   source VARCHAR, loaded_at TIMESTAMP DEFAULT current_timestamp
+);
+CREATE TABLE IF NOT EXISTS gld_holdings (
+  holding_date DATE, tonnes DOUBLE, ounces DOUBLE, nav_usd DOUBLE, source VARCHAR,
+  loaded_at TIMESTAMP DEFAULT current_timestamp
 );
 CREATE TABLE IF NOT EXISTS splits (
   symbol VARCHAR, yahoo_symbol VARCHAR, split_date DATE, ratio DOUBLE,
@@ -220,6 +225,13 @@ YAHOO_DAILY = ["GDX", "GDXJ", "SIL", "SILJ", "GLD", "SLV", "^FTSE"]
 # treat roll weeks with care. COMEX/NYMEX metals and energy, CME equity indices.
 YAHOO_FUTURES = ["GC=F", "SI=F", "PL=F", "HG=F", "BZ=F", "CL=F", "ES=F", "NQ=F", "YM=F", "RTY=F"]
 
+# ETFs as a "second crowd" (24 Nov 2026, Q16): what fund buyers do alongside the CFD markets.
+# Broad US (SPY, QQQ, IWM), leveraged long/short (TQQQ, SQQQ, SPXU - retail fear and greed),
+# country funds for the home markets (EWU UK, EWG Germany, EWJ Japan, EWH Hong Kong),
+# credit (HYG junk, LQD investment grade - risk appetite), oil (USO) and copper miners (COPX).
+YAHOO_ETFS = ["SPY", "QQQ", "IWM", "TQQQ", "SQQQ", "SPXU", "EWU", "EWG", "EWJ", "EWH",
+              "HYG", "LQD", "USO", "COPX"]
+
 
 def _fetch_yahoo_history(ticker: str):
     import yfinance as yf
@@ -238,7 +250,7 @@ def fetch_yahoo_daily(ticker: str, timeout: float = 60):
 def update_yahoo_daily(con, tickers=None, fetch=fetch_yahoo_daily) -> dict:
     from . import db
     out = {}
-    for t in tickers or (YAHOO_DAILY + YAHOO_FUTURES):
+    for t in tickers or (YAHOO_DAILY + YAHOO_ETFS + YAHOO_FUTURES):
         try:
             h = fetch(t)
         except Exception as exc:
@@ -257,6 +269,79 @@ def update_yahoo_daily(con, tickers=None, fetch=fetch_yahoo_daily) -> dict:
     return out
 
 
+# ---------------------------------------------------------------- GLD holdings
+
+# Tonnes of gold held by SPDR Gold Shares (GLD), daily since Nov 2004: creations and redemptions show
+# whether big fund money is buying or selling physical gold. The trust's archive is a CSV with a few
+# disclaimer lines above the header; holidays carry the word HOLIDAY instead of numbers.
+GLD_ARCHIVE_URL = "https://www.spdrgoldshares.com/assets/dynamic/GLD/GLD_US_archive_EN.csv"
+
+
+def fetch_gld_archive(url: str = GLD_ARCHIVE_URL, timeout: float = 60) -> str:
+    r = requests.get(url, timeout=timeout, headers={"User-Agent": "Mozilla/5.0 (helios-data)"})
+    r.raise_for_status()
+    return r.text
+
+
+def _num(v):
+    try:
+        return float(str(v).replace(",", "").replace("$", "").strip())
+    except ValueError:
+        return None
+
+
+def parse_gld_archive(text: str) -> pd.DataFrame:
+    import csv
+    import io
+    rows = list(csv.reader(io.StringIO(text)))
+    hdr_i = next((i for i, r in enumerate(rows) if r and r[0].strip().lower() == "date"), None)
+    if hdr_i is None:
+        raise ValueError("GLD archive: no header row starting with 'Date'")
+    hdr = [c.strip().lower() for c in rows[hdr_i]]
+
+    def col(*words):
+        return next((i for i, c in enumerate(hdr) if all(w in c for w in words)), None)
+
+    ti, oi = col("tonnes"), col("ounces")
+    ni = next((i for i, c in enumerate(hdr) if "net asset value" in c and "tonnes" not in c
+               and "ounces" not in c), None)
+    if ti is None:
+        raise ValueError("GLD archive: no tonnes column")
+    out = []
+    for r in rows[hdr_i + 1:]:
+        if len(r) <= ti or not r[0].strip():
+            continue
+        d = pd.to_datetime(r[0].strip(), format="mixed", dayfirst=True, errors="coerce")
+        t = _num(r[ti])
+        if pd.isna(d) or t is None:
+            continue           # holiday or footer line
+        out.append({"holding_date": d.date(), "tonnes": t,
+                    "ounces": _num(r[oi]) if oi is not None and len(r) > oi else None,
+                    "nav_usd": _num(r[ni]) if ni is not None and len(r) > ni else None})
+    df = pd.DataFrame(out, columns=["holding_date", "tonnes", "ounces", "nav_usd"])
+    return df.drop_duplicates("holding_date", keep="last").sort_values("holding_date")
+
+
+def update_gld_holdings(con, fetch=fetch_gld_archive) -> int:
+    """Replace gld_holdings with the full archive. Never raises: a failed download only logs."""
+    try:
+        df = parse_gld_archive(fetch())
+    except Exception as exc:
+        log.warning("GLD holdings failed: %s", exc)
+        return 0
+    if df.empty:
+        log.warning("GLD holdings: archive parsed to 0 rows - left the table as it was")
+        return 0
+    df["source"] = "spdr_archive"
+    con.execute("DELETE FROM gld_holdings")
+    con.register("gld_df", df)
+    con.execute("INSERT INTO gld_holdings (holding_date, tonnes, ounces, nav_usd, source) "
+                "SELECT holding_date, tonnes, ounces, nav_usd, source FROM gld_df")
+    con.unregister("gld_df")
+    log.info("GLD holdings: %d days, last %s = %.1f t", len(df), df.holding_date.iloc[-1], df.tonnes.iloc[-1])
+    return len(df)
+
+
 # ---------------------------------------------------------------- entry point
 
 def main(argv=None):
@@ -273,6 +358,8 @@ def main(argv=None):
         update_calendar(con)
     if args.only in (None, "etfs"):
         update_yahoo_daily(con, args.symbols if args.only == "etfs" else None)
+        if not (args.only == "etfs" and args.symbols):
+            update_gld_holdings(con)
     if args.only == "dividends":
         res = update_dividends(con, args.symbols)
         if res["got"] == 0:

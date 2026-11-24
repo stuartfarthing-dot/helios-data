@@ -218,3 +218,34 @@ def test_minute_bars_can_start_later_than_daily(con, monkeypatch):
                         lambda code, tf, start, end: calls.append(start) or fake_bars(start, end, "D"))
     dukascopy_ingest.update(con, "XAGUSD", "1m", now=datetime(2020, 1, 3, tzinfo=timezone.utc))
     assert calls[0] == datetime(2020, 1, 1, tzinfo=timezone.utc)      # history_start_1m, not 2003
+
+
+GLD_SAMPLE = """SPDR Gold Trust - historical data
+This document is for information purposes only.
+
+Date,GLD Close,LBMA Gold Price,NAV,Daily Share Volume,Total Net Asset Value Ounces in the Trust,Total Net Asset Value Tonnes in the Trust,Total Net Asset Value in the Trust
+20-Nov-2026,371.20,"$4,010.50",370.95,"9,100,000","28,700,000.10",892.68,"$106,000,000,000"
+26-Nov-2026, HOLIDAY, HOLIDAY, HOLIDAY, HOLIDAY, HOLIDAY, HOLIDAY, HOLIDAY
+23-Nov-2026,368.00,"$3,975.00",367.80,"11,500,000","28,650,000.00",891.12,"$105,400,000,000"
+"""
+
+
+def test_gld_holdings(con):
+    from helios_data import events_ingest as ev
+    con.execute(ev.SCHEMA)
+    assert ev.update_gld_holdings(con, fetch=lambda: GLD_SAMPLE) == 2
+    assert ev.update_gld_holdings(con, fetch=lambda: GLD_SAMPLE) == 2      # rerun replaces
+    rows = con.execute("SELECT holding_date, tonnes, ounces, nav_usd FROM gld_holdings ORDER BY 1").fetchall()
+    assert [str(r[0]) for r in rows] == ["2026-11-20", "2026-11-23"]
+    assert rows[1][1] == 891.12 and rows[0][2] == 28700000.10 and rows[0][3] == 106e9
+
+
+def test_gld_holdings_failure_keeps_table(con):
+    from helios_data import events_ingest as ev
+    con.execute(ev.SCHEMA)
+    ev.update_gld_holdings(con, fetch=lambda: GLD_SAMPLE)
+
+    def boom():
+        raise OSError("blocked")
+    assert ev.update_gld_holdings(con, fetch=boom) == 0
+    assert con.execute("SELECT count(*) FROM gld_holdings").fetchone()[0] == 2
