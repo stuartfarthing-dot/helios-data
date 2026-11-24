@@ -262,3 +262,41 @@ def test_gld_holdings_date_not_first(con):
     con.execute(ev.SCHEMA)
     txt = "﻿note\n x , Date ,Total Net Asset Value Tonnes in the Trust\n,20-Nov-2026,892.68\n,23-Nov-2026,891.12\n"
     assert ev.update_gld_holdings(con, fetch=lambda: txt) == 2
+
+
+def _gld_xlsx():
+    import io
+    import openpyxl
+    wb = openpyxl.Workbook()
+    wb.active.title = "Disclaimer"
+    wb.active["A1"] = "SPDR GOLD SHARES HISTORICAL DATA\n\nDISCLAIMER"
+    ws = wb.create_sheet("US GLD Historical Archive")
+    ws.append(["Date", "Closing Price", "Ounces of Gold per Share", "NAV/Share at 10:30am NYT",
+               "Indicative Price per Share at 4:15pm NYT", "Mid point of bid/ask spread at 4:15pm NYT",
+               "Premium/Discount", "Daily Share Volume", "Total Ounces of Gold in the Trust",
+               "Tonnes of Gold", "Total Net Asset Value in the Trust"])
+    ws.append(["20-Nov-2026", 322.87, 0.0916, 327.07, 322.88, 323.02, 0.04, 23643352,
+               33258084.55, 1034.43, 118695857875.87])
+    ws.append(["21-Nov-2026"] + ["US Holiday"] * 10)
+    ws.append(["23-Nov-2026", 333.02, 0.0916, 336.02, 333.32, 332.97, -0.1, 12319467,
+               33157301.8, 1031.3, 121573271959.08])
+    ws.append(["24-Nov-2026"] + ["AWAITED"] * 10)
+    b = io.BytesIO()
+    wb.save(b)
+    return b.getvalue()
+
+
+def test_gld_holdings_xlsx(con):
+    from helios_data import events_ingest as ev
+    con.execute(ev.SCHEMA)
+    data = _gld_xlsx()
+    assert ev.update_gld_holdings(con, fetch=lambda: data) == 2
+    rows = con.execute("SELECT holding_date, tonnes, ounces, nav_usd FROM gld_holdings ORDER BY 1").fetchall()
+    assert [str(r[0]) for r in rows] == ["2026-11-20", "2026-11-23"]
+    assert rows[1][1] == 1031.3 and rows[1][2] == 33157301.8 and round(rows[1][3]) == 121573271959
+
+
+def test_gld_holdings_pdf_is_refused(con):
+    from helios_data import events_ingest as ev
+    con.execute(ev.SCHEMA)
+    assert ev.update_gld_holdings(con, fetch=lambda: b"%PDF-1.5 junk") == 0

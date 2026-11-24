@@ -272,15 +272,17 @@ def update_yahoo_daily(con, tickers=None, fetch=fetch_yahoo_daily) -> dict:
 # ---------------------------------------------------------------- GLD holdings
 
 # Tonnes of gold held by SPDR Gold Shares (GLD), daily since Nov 2004: creations and redemptions show
-# whether big fund money is buying or selling physical gold. The trust's archive is a CSV with a few
-# disclaimer lines above the header; holidays carry the word HOLIDAY instead of numbers.
-GLD_ARCHIVE_URL = "https://www.spdrgoldshares.com/assets/dynamic/GLD/GLD_US_archive_EN.csv"
+# whether big fund money is buying or selling physical gold. Since late 2026 the trust publishes the
+# archive as an Excel workbook from its API (the old CSV address now returns a PDF). Sheet "US GLD
+# Historical Archive": Date (text, e.g. 23-Nov-2026), ..., Total Ounces of Gold in the Trust, Tonnes of
+# Gold, Total Net Asset Value in the Trust. Holidays carry "US Holiday"; a day not yet final "AWAITED".
+GLD_ARCHIVE_URL = "https://api.spdrgoldshares.com/api/v1/historical-archive?product=gld&exchange=NYSE&lang=en"
 
 
-def fetch_gld_archive(url: str = GLD_ARCHIVE_URL, timeout: float = 60) -> str:
+def fetch_gld_archive(url: str = GLD_ARCHIVE_URL, timeout: float = 60) -> bytes:
     r = requests.get(url, timeout=timeout, headers={"User-Agent": "Mozilla/5.0 (helios-data)"})
     r.raise_for_status()
-    return r.text
+    return r.content
 
 
 def _num(v):
@@ -290,40 +292,50 @@ def _num(v):
         return None
 
 
-def parse_gld_archive(text: str) -> pd.DataFrame:
+def _gld_rows(data) -> list[list[str]]:
+    """Rows of cell text from the archive: an .xlsx workbook (bytes starting PK) or CSV text."""
     import csv
     import io
-    # The archive uses bare carriage returns as line ends in places, which csv rejects.
-    text = text.replace("\r\n", "\n").replace("\r", "\n")
-    rows = list(csv.reader(io.StringIO(text)))
-    # Header = first row with a "date" cell and a "tonnes" cell (the date column may not come first,
-    # and cells may carry stray spaces or a byte-order mark).
+    if isinstance(data, bytes) and data[:2] == b"PK":
+        sheets = pd.read_excel(io.BytesIO(data), sheet_name=None, header=None, dtype=str)
+        name = next((k for k in sheets if "archive" in k.lower()), list(sheets)[-1])
+        return sheets[name].fillna("").astype(str).values.tolist()
+    if isinstance(data, bytes):
+        if data[:4] == b"%PDF":
+            raise ValueError("GLD archive: the address returned a PDF, not data")
+        data = data.decode("utf-8-sig", errors="replace")
+    # Bare carriage returns as line ends make csv fail; normalise them first.
+    text = data.replace("\r\n", "\n").replace("\r", "\n")
+    return list(csv.reader(io.StringIO(text)))
+
+
+def parse_gld_archive(data) -> pd.DataFrame:
+    rows = _gld_rows(data)
+
+    # Header = first row with a "date" cell and a "tonnes" cell (date column anywhere; stray spaces or
+    # a byte-order mark ignored).
     def norm(c):
-        return c.replace("\ufeff", "").strip().lower()
+        return str(c).replace("\ufeff", "").strip().lower()
     hdr_i = next((i for i, r in enumerate(rows)
-                  if any(norm(c) == "date" or norm(c).startswith("date") for c in r)
+                  if any(norm(c).startswith("date") for c in r)
                   and any("tonnes" in norm(c) for c in r)), None)
     if hdr_i is None:
-        raise ValueError("GLD archive: no header row with Date and Tonnes; file starts: %r" % text[:400])
+        raise ValueError("GLD archive: no header row with Date and Tonnes; starts: %r" % rows[:3])
     hdr = [norm(c) for c in rows[hdr_i]]
-    di = next(i for i, c in enumerate(hdr) if c == "date" or c.startswith("date"))
-
-    def col(*words):
-        return next((i for i, c in enumerate(hdr) if all(w in c for w in words)), None)
-
-    ti, oi = col("tonnes"), col("ounces")
-    ni = next((i for i, c in enumerate(hdr) if "net asset value" in c and "tonnes" not in c
-               and "ounces" not in c), None)
-    if ti is None:
-        raise ValueError("GLD archive: no tonnes column")
+    di = next(i for i, c in enumerate(hdr) if c.startswith("date"))
+    ti = next(i for i, c in enumerate(hdr) if "tonnes" in c)
+    # Total ounces in the trust, not "ounces of gold per share".
+    oi = next((i for i, c in enumerate(hdr) if "ounces" in c and "per share" not in c), None)
+    ni = next((i for i, c in enumerate(hdr) if "net asset value" in c and "/share" not in c
+               and "per share" not in c and "ounces" not in c and "tonnes" not in c), None)
     out = []
     for r in rows[hdr_i + 1:]:
-        if len(r) <= max(ti, di) or not r[di].strip():
+        if len(r) <= max(ti, di) or not str(r[di]).strip():
             continue
-        d = pd.to_datetime(r[di].strip(), format="mixed", dayfirst=True, errors="coerce")
+        d = pd.to_datetime(str(r[di]).strip(), format="mixed", dayfirst=True, errors="coerce")
         t = _num(r[ti])
         if pd.isna(d) or t is None:
-            continue           # holiday or footer line
+            continue           # holiday, AWAITED or footer line
         out.append({"holding_date": d.date(), "tonnes": t,
                     "ounces": _num(r[oi]) if oi is not None and len(r) > oi else None,
                     "nav_usd": _num(r[ni]) if ni is not None and len(r) > ni else None})
