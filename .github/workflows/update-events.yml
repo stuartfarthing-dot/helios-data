@@ -45,6 +45,9 @@ jobs:
         env:
           FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
         run: python -m helios_data.fred_ingest
+      - name: Australian rates (RBA tables F1 and F2)
+        continue-on-error: true
+        run: python -m helios_data.rba_ingest
       - name: Economic-calendar actual figures (Forex Factory via Apify, pay per event)
         continue-on-error: true
         env:
