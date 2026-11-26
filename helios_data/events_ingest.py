@@ -238,6 +238,12 @@ YAHOO_ETFS = ["SPY", "QQQ", "IWM", "TQQQ", "SQQQ", "SPXU", "EWU", "EWG", "EWJ", 
 # lead-lag work, Q14.28).
 YAHOO_KOREA = ["^KS11", "EWY"]
 
+# MSCI benchmarks through their ETFs (26 Nov 2026, Stuart): data only. ACWI = MSCI All Country World,
+# URTH = MSCI World (developed), EFA = MSCI EAFE (developed ex-US and Canada), EEM = MSCI Emerging Markets,
+# EWT = MSCI Taiwan (chips, beside Korea). For market-character work (which crowds buy dips, which trend) and
+# developed-vs-emerging risk appetite.
+YAHOO_MSCI = ["ACWI", "URTH", "EFA", "EEM", "EWT"]
+
 
 def _fetch_yahoo_history(ticker: str):
     import yfinance as yf
@@ -256,7 +262,7 @@ def fetch_yahoo_daily(ticker: str, timeout: float = 60):
 def update_yahoo_daily(con, tickers=None, fetch=fetch_yahoo_daily) -> dict:
     from . import db
     out = {}
-    for t in tickers or (YAHOO_DAILY + YAHOO_ETFS + YAHOO_KOREA + YAHOO_FUTURES):
+    for t in tickers or (YAHOO_DAILY + YAHOO_ETFS + YAHOO_KOREA + YAHOO_MSCI + YAHOO_FUTURES):
         try:
             h = fetch(t)
         except Exception as exc:
