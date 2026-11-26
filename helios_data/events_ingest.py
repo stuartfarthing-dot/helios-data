@@ -232,6 +232,12 @@ YAHOO_FUTURES = ["GC=F", "SI=F", "PL=F", "HG=F", "BZ=F", "CL=F", "ES=F", "NQ=F",
 YAHOO_ETFS = ["SPY", "QQQ", "IWM", "TQQQ", "SQQQ", "SPXU", "EWU", "EWG", "EWJ", "EWH",
               "HYG", "LQD", "USO", "COPX"]
 
+# Korea (26 Nov 2026, Stuart): the KOSPI index and the US-listed Korea fund. Data only, not traded (IG has no
+# Korean index spread bet that we know of). Korea is chip-heavy, export-led and the first big market to trade
+# each day, so it is a candidate early read on the AI/semiconductor cycle and global trade (crowd and
+# lead-lag work, Q14.28).
+YAHOO_KOREA = ["^KS11", "EWY"]
+
 
 def _fetch_yahoo_history(ticker: str):
     import yfinance as yf
@@ -250,7 +256,7 @@ def fetch_yahoo_daily(ticker: str, timeout: float = 60):
 def update_yahoo_daily(con, tickers=None, fetch=fetch_yahoo_daily) -> dict:
     from . import db
     out = {}
-    for t in tickers or (YAHOO_DAILY + YAHOO_ETFS + YAHOO_FUTURES):
+    for t in tickers or (YAHOO_DAILY + YAHOO_ETFS + YAHOO_KOREA + YAHOO_FUTURES):
         try:
             h = fetch(t)
         except Exception as exc:
