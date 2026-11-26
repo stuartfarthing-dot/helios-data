@@ -37,7 +37,8 @@ INSTRUMENTS = {
                "spread": 0.5, "timeframes": DAILY_HOURLY, "history_start": "2003-01-01"},
     "NAS100": {"name": "Nasdaq 100", "dukascopy": "E_NQ-100",
                "asset_class": "index", "session_tz": "America/New_York", "session_shift": 7,
-               "spread": 1.0, "timeframes": DAILY_HOURLY, "history_start": "2003-01-01"},
+               "spread": 1.0, "timeframes": ALL_TIMEFRAMES, "history_start": "2003-01-01",
+               "history_start_1m": "2020-01-01"},   # minute bars added 26 Nov 2026 (Q18, intraday pressure)
     "GER40":  {"name": "DAX 40", "dukascopy": "E_DAAX",
                "asset_class": "index", "session_tz": "Europe/Berlin", "session_shift": 0,
                "spread": 1.2, "timeframes": DAILY_HOURLY, "history_start": "2003-01-01"},
