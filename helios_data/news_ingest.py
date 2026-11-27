@@ -605,10 +605,12 @@ def run_live(con, sources=None, now=None) -> Ctx:
         elif s == "guardian":
             collect_guardian(ctx, today - timedelta(days=2), today)
         elif s == "nyt":
-            # one archive call per day is enough (and NYT's limit is tight): only on the first run after 20:00 UTC
-            ran_today = con.execute("""SELECT count(*) FROM news.collection_log WHERE source_id='nyt' AND mode='live'
-                                       AND status='ok' AND CAST(run_utc AS DATE) = ?""", [today]).fetchone()[0]
-            if ctx.now.hour >= 20 and not ran_today:
+            # one archive call a day is enough (and NYT's limit is tight). GitHub often delays or drops the
+            # scheduled runs, so don't wait for an evening run: call NYT on any run once 20 hours have passed
+            # since the last successful call.
+            last_ok = con.execute("""SELECT max(run_utc) FROM news.collection_log WHERE source_id='nyt' AND mode='live'
+                                     AND status='ok'""").fetchone()[0]
+            if last_ok is None or (ctx.now - last_ok) >= timedelta(hours=20):
                 if today.day <= 2:              # catch the end of the previous month too
                     collect_nyt(ctx, (today.replace(day=1) - timedelta(days=1)).replace(day=1), today)
                 else:
