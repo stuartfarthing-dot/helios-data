@@ -41,6 +41,33 @@ SERIES = {
     "IRLTLT01GBM156N": ("UK 10-year government bond yield, %", "monthly"),
     "IRLTLT01DEM156N": ("Germany 10-year government bond yield, %", "monthly"),
     "IRLTLT01JPM156N": ("Japan 10-year government bond yield, %", "monthly"),
+    # Short-term interest rates by currency (28 Nov 2026, carry test H45): OECD 3-month interbank rates and
+    # call-money / overnight rates, monthly. Some 3-month series stop when a LIBOR rate was retired, so both
+    # families are loaded and the research uses whichever is available for each month.
+    "IR3TIB01USM156N": ("United States 3-month interbank rate, %", "monthly"),
+    "IRSTCI01USM156N": ("United States call money / overnight rate, %", "monthly"),
+    "IR3TIB01EZM156N": ("euro area 3-month interbank rate, %", "monthly"),
+    "IRSTCI01EZM156N": ("euro area call money / overnight rate, %", "monthly"),
+    "IR3TIB01GBM156N": ("United Kingdom 3-month interbank rate, %", "monthly"),
+    "IRSTCI01GBM156N": ("United Kingdom call money / overnight rate, %", "monthly"),
+    "IR3TIB01JPM156N": ("Japan 3-month interbank rate, %", "monthly"),
+    "IRSTCI01JPM156N": ("Japan call money / overnight rate, %", "monthly"),
+    "IR3TIB01AUM156N": ("Australia 3-month interbank rate, %", "monthly"),
+    "IRSTCI01AUM156N": ("Australia call money / overnight rate, %", "monthly"),
+    "IR3TIB01NZM156N": ("New Zealand 3-month interbank rate, %", "monthly"),
+    "IRSTCI01NZM156N": ("New Zealand call money / overnight rate, %", "monthly"),
+    "IR3TIB01CAM156N": ("Canada 3-month interbank rate, %", "monthly"),
+    "IRSTCI01CAM156N": ("Canada call money / overnight rate, %", "monthly"),
+    "IR3TIB01CHM156N": ("Switzerland 3-month interbank rate, %", "monthly"),
+    "IRSTCI01CHM156N": ("Switzerland call money / overnight rate, %", "monthly"),
+    "IR3TIB01NOM156N": ("Norway 3-month interbank rate, %", "monthly"),
+    "IRSTCI01NOM156N": ("Norway call money / overnight rate, %", "monthly"),
+    "IR3TIB01SEM156N": ("Sweden 3-month interbank rate, %", "monthly"),
+    "IRSTCI01SEM156N": ("Sweden call money / overnight rate, %", "monthly"),
+    "IR3TIB01MXM156N": ("Mexico 3-month interbank rate, %", "monthly"),
+    "IRSTCI01MXM156N": ("Mexico call money / overnight rate, %", "monthly"),
+    "IR3TIB01ZAM156N": ("South Africa 3-month interbank rate, %", "monthly"),
+    "IRSTCI01ZAM156N": ("South Africa call money / overnight rate, %", "monthly"),
 }
 
 SCHEMA = """

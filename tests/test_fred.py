@@ -32,3 +32,8 @@ def test_one_failing_series_does_not_stop_the_rest():
         return pd.DataFrame([{"d": date(2026, 1, 1), "value": 1.0}])
     out = fi.update(con, "k", series=["BAD", "DGS10"], fetcher=f, pause=0)
     assert out == {"BAD": None, "DGS10": 1}
+
+
+def test_short_rates_for_every_carry_currency():
+    for c in ("US", "EZ", "GB", "JP", "AU", "NZ", "CA", "CH", "NO", "SE", "MX", "ZA"):
+        assert f"IR3TIB01{c}M156N" in fi.SERIES and f"IRSTCI01{c}M156N" in fi.SERIES

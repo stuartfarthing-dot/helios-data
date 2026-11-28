@@ -195,6 +195,66 @@ INSTRUMENTS = {
                "asset_class": "fx", "session_tz": "America/New_York", "session_shift": 7,
                "spread": 0.00006, "timeframes": DAILY_HOURLY, "history_start": "2003-01-01"},
 
+    # --- more currencies (28 Nov 2026, Stuart: currencies back in scope for trading, for diversification) ---
+    # The rest of the G10 against the dollar, two higher-yielding emerging currencies (MXN, ZAR) and the
+    # main crosses, for the interest-rate carry test (H45). Daily and hourly bars (state_daily is built from
+    # hourly bars). Spreads are approximate IG spread-bet figures, to be checked against IG (A5).
+    "NZDUSD": {"name": "NZD/USD", "dukascopy": "NZD/USD",
+               "asset_class": "fx", "session_tz": "America/New_York", "session_shift": 7,
+               "spread": 0.00015, "timeframes": ["1d", "1h"], "history_start": "2003-01-01"},
+    "USDCAD": {"name": "USD/CAD", "dukascopy": "USD/CAD",
+               "asset_class": "fx", "session_tz": "America/New_York", "session_shift": 7,
+               "spread": 0.00015, "timeframes": ["1d", "1h"], "history_start": "2003-01-01"},
+    "USDCHF": {"name": "USD/CHF", "dukascopy": "USD/CHF",
+               "asset_class": "fx", "session_tz": "America/New_York", "session_shift": 7,
+               "spread": 0.00015, "timeframes": ["1d", "1h"], "history_start": "2003-01-01"},
+    "USDNOK": {"name": "USD/NOK", "dukascopy": "USD/NOK",
+               "asset_class": "fx", "session_tz": "America/New_York", "session_shift": 7,
+               "spread": 0.004, "timeframes": ["1d", "1h"], "history_start": "2003-01-01"},
+    "USDSEK": {"name": "USD/SEK", "dukascopy": "USD/SEK",
+               "asset_class": "fx", "session_tz": "America/New_York", "session_shift": 7,
+               "spread": 0.004, "timeframes": ["1d", "1h"], "history_start": "2003-01-01"},
+    "USDMXN": {"name": "USD/MXN", "dukascopy": "USD/MXN",
+               "asset_class": "fx", "session_tz": "America/New_York", "session_shift": 7,
+               "spread": 0.006, "timeframes": ["1d", "1h"], "history_start": "2003-01-01"},
+    "USDZAR": {"name": "USD/ZAR", "dukascopy": "USD/ZAR",
+               "asset_class": "fx", "session_tz": "America/New_York", "session_shift": 7,
+               "spread": 0.009, "timeframes": ["1d", "1h"], "history_start": "2003-01-01"},
+    "EURGBP": {"name": "EUR/GBP", "dukascopy": "EUR/GBP",
+               "asset_class": "fx", "session_tz": "America/New_York", "session_shift": 7,
+               "spread": 9e-05, "timeframes": ["1d", "1h"], "history_start": "2003-01-01"},
+    "EURJPY": {"name": "EUR/JPY", "dukascopy": "EUR/JPY",
+               "asset_class": "fx", "session_tz": "America/New_York", "session_shift": 7,
+               "spread": 0.015, "timeframes": ["1d", "1h"], "history_start": "2003-01-01"},
+    "AUDJPY": {"name": "AUD/JPY", "dukascopy": "AUD/JPY",
+               "asset_class": "fx", "session_tz": "America/New_York", "session_shift": 7,
+               "spread": 0.015, "timeframes": ["1d", "1h"], "history_start": "2003-01-01"},
+    "GBPJPY": {"name": "GBP/JPY", "dukascopy": "GBP/JPY",
+               "asset_class": "fx", "session_tz": "America/New_York", "session_shift": 7,
+               "spread": 0.025, "timeframes": ["1d", "1h"], "history_start": "2003-01-01"},
+
+    # --- agriculture and softs (28 Nov 2026, diversification plan item 2) ---
+    # Dukascopy's six agricultural CFDs (it has no wheat, corn or livestock: those come from Yahoo futures,
+    # see events_ingest.YAHOO_AGRI). Spreads are approximate IG figures in Dukascopy's price units.
+    "COCOA": {"name": "Cocoa (New York)", "dukascopy": "COCOA.CMD/USD",
+               "asset_class": "commodity", "sector": "agriculture", "session_tz": "America/New_York", "session_shift": 7,
+               "spread": 4.0, "timeframes": ["1d", "1h"], "history_start": "2010-01-01"},
+    "COFFEE": {"name": "Coffee (Arabica)", "dukascopy": "COFFEE.CMD/USX",
+               "asset_class": "commodity", "sector": "agriculture", "session_tz": "America/New_York", "session_shift": 7,
+               "spread": 0.3, "timeframes": ["1d", "1h"], "history_start": "2010-01-01"},
+    "COTTON": {"name": "Cotton", "dukascopy": "COTTON.CMD/USX",
+               "asset_class": "commodity", "sector": "agriculture", "session_tz": "America/New_York", "session_shift": 7,
+               "spread": 0.2, "timeframes": ["1d", "1h"], "history_start": "2010-01-01"},
+    "OJUICE": {"name": "Orange juice", "dukascopy": "OJUICE.CMD/USX",
+               "asset_class": "commodity", "sector": "agriculture", "session_tz": "America/New_York", "session_shift": 7,
+               "spread": 1.0, "timeframes": ["1d", "1h"], "history_start": "2010-01-01"},
+    "SOYBEAN": {"name": "Soybeans", "dukascopy": "SOYBEAN.CMD/USX",
+               "asset_class": "commodity", "sector": "agriculture", "session_tz": "America/New_York", "session_shift": 7,
+               "spread": 1.0, "timeframes": ["1d", "1h"], "history_start": "2010-01-01"},
+    "SUGAR": {"name": "Sugar (raw)", "dukascopy": "SUGAR.CMD/USD",
+               "asset_class": "commodity", "sector": "agriculture", "session_tz": "America/New_York", "session_shift": 7,
+               "spread": 0.04, "timeframes": ["1d", "1h"], "history_start": "2010-01-01"},
+
 }
 
 # FX was taken out of scope for TRADING by Stuart on 10 Nov 2026. From 24 Nov 2026 GBP/USD and USD/JPY are
@@ -202,9 +262,8 @@ INSTRUMENTS = {
 # 25 Nov 2026 AUD/USD too (the Australian rates channel, board Q14.32-Q14.34). EUR/USD stays off.
 # Bonds were also switched off on 10 Nov, then switched back on 22 Nov 2026 (Stuart: "keep bond prices
 # in the data warehouse, always useful"). They are data only (e.g. the gold-vs-gilts co-movement); no system trades them.
-for _v in INSTRUMENTS.values():
-    if _v["asset_class"] == "fx" and _v["name"] not in ("GBP/USD", "USD/JPY", "AUD/USD"):
-        _v["active"] = False
+# 28 Nov 2026: Stuart brought currencies and bonds back into scope for trading (diversification), so every
+# currency pair is updated nightly again, EUR/USD included.
 
 # --- UK shares (added 10 Nov 2026) --------------------------------------------------------
 # Every UK share Dukascopy offers (current and former FTSE 100 members, ~117). Daily bars only.

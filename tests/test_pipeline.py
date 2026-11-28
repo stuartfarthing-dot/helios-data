@@ -300,3 +300,13 @@ def test_gld_holdings_pdf_is_refused(con):
     from helios_data import events_ingest as ev
     con.execute(ev.SCHEMA)
     assert ev.update_gld_holdings(con, fetch=lambda: b"%PDF-1.5 junk") == 0
+
+
+def test_diversification_markets_are_configured():
+    from helios_data import config as c
+    from helios_data import events_ingest as ev
+    fx = [s for s, v in c.INSTRUMENTS.items() if v["asset_class"] == "fx"]
+    assert len(fx) == 15 and all(s in c.ACTIVE for s in fx)          # every pair updated nightly again
+    for s in ("COCOA", "COFFEE", "COTTON", "OJUICE", "SOYBEAN", "SUGAR", "USDMXN", "EURJPY"):
+        assert s in c.ACTIVE and "1h" in c.INSTRUMENTS[s]["timeframes"]   # state_daily needs hourly bars
+    assert "ZW=F" in ev.YAHOO_AGRI and "LE=F" in ev.YAHOO_AGRI

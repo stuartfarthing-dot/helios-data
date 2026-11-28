@@ -244,6 +244,14 @@ YAHOO_KOREA = ["^KS11", "EWY"]
 # developed-vs-emerging risk appetite.
 YAHOO_MSCI = ["ACWI", "URTH", "EFA", "EEM", "EWT"]
 
+# Agriculture and livestock futures (28 Nov 2026, diversification plan item 2): long daily histories (from
+# about 2000) for the market-character screen. CBOT grains (corn, wheat, soybeans, soybean meal and oil),
+# KC hard red wheat, ICE softs (coffee, sugar, cocoa, cotton, orange juice) and CME livestock (live and feeder
+# cattle, lean hogs). Yahoo's "=F" series follow the front contract and are NOT adjusted at rolls, so a roll
+# shows up as a price jump: research must treat roll days with care.
+YAHOO_AGRI = ["ZC=F", "ZW=F", "KE=F", "ZS=F", "ZM=F", "ZL=F", "KC=F", "SB=F", "CC=F", "CT=F", "OJ=F",
+              "LE=F", "GF=F", "HE=F"]
+
 
 def _fetch_yahoo_history(ticker: str):
     import yfinance as yf
@@ -262,7 +270,7 @@ def fetch_yahoo_daily(ticker: str, timeout: float = 60):
 def update_yahoo_daily(con, tickers=None, fetch=fetch_yahoo_daily) -> dict:
     from . import db
     out = {}
-    for t in tickers or (YAHOO_DAILY + YAHOO_ETFS + YAHOO_KOREA + YAHOO_MSCI + YAHOO_FUTURES):
+    for t in tickers or (YAHOO_DAILY + YAHOO_ETFS + YAHOO_KOREA + YAHOO_MSCI + YAHOO_FUTURES + YAHOO_AGRI):
         try:
             h = fetch(t)
         except Exception as exc:
