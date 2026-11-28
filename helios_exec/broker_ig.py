@@ -120,24 +120,56 @@ class DemoIG:
                                "Content-Type": "application/json; charset=UTF-8",
                                "Accept": "application/json; charset=UTF-8"})
 
-    def _req(self, method, path, version="1", **kw):
+    def _req(self, method, path, version="1", _retry=True, **kw):
         r = self.s.request(method, self.base + path, headers={"Version": version}, timeout=30, **kw)
+        if r.status_code == 401 and _retry and getattr(self, "_refresh", None) and "oauth-token-invalid" in r.text:
+            self._refresh_token()
+            return self._req(method, path, version, _retry=False, **kw)
         if not r.ok:
             raise RuntimeError(f"IG {method} {path} -> {r.status_code}: {r.text}")
         return r
 
     def login(self):
         import os
-        r = self._req("POST", "/session", "2", json={"identifier": self._user, "password": self._pw})
+        wanted = os.getenv("HX_IG_ACCOUNT_ID")
+        r = self.s.request("POST", self.base + "/session", headers={"Version": "2"}, timeout=30,
+                           json={"identifier": self._user, "password": self._pw})
+        if r.status_code == 401 and "account-migrated" in r.text:
+            return self._login_v3(wanted)          # IG's newer (OAuth) login for migrated accounts
+        if not r.ok:
+            raise RuntimeError(f"IG POST /session -> {r.status_code}: {r.text}")
         self.s.headers["CST"] = r.headers["CST"]
         self.s.headers["X-SECURITY-TOKEN"] = r.headers["X-SECURITY-TOKEN"]
         body = r.json()
-        want = choose_account(body.get("accounts") or [], body.get("currentAccountId"), os.getenv("HX_IG_ACCOUNT_ID"))
+        want = choose_account(body.get("accounts") or [], body.get("currentAccountId"), wanted)
         if want["accountId"] != body.get("currentAccountId"):
             s = self._req("PUT", "/session", "1", json={"accountId": want["accountId"], "defaultAccount": False})
             if s.headers.get("X-SECURITY-TOKEN"):
                 self.s.headers["X-SECURITY-TOKEN"] = s.headers["X-SECURITY-TOKEN"]
         self.account_id, self.account_type = want["accountId"], want.get("accountType")
+
+    def _login_v3(self, wanted):
+        """Version 3 login: OAuth tokens (short-lived, refreshed on expiry) and an IG-ACCOUNT-ID header
+        that selects the account for every request."""
+        r = self._req("POST", "/session", "3", json={"identifier": self._user, "password": self._pw})
+        body = r.json()
+        self._set_token(body.get("oauthToken") or {})
+        self.s.headers["IG-ACCOUNT-ID"] = body.get("accountId")
+        accounts = self._req("GET", "/accounts", "1").json().get("accounts", [])
+        want = choose_account(accounts, body.get("accountId"), wanted)
+        self.s.headers["IG-ACCOUNT-ID"] = want["accountId"]
+        self.account_id, self.account_type = want["accountId"], want.get("accountType")
+
+    def _set_token(self, tok: dict):
+        self.s.headers["Authorization"] = f"Bearer {tok.get('access_token')}"
+        self._refresh = tok.get("refresh_token")
+
+    def _refresh_token(self):
+        r = self.s.request("POST", self.base + "/session/refresh-token", headers={"Version": "1"}, timeout=30,
+                           json={"refresh_token": self._refresh})
+        if not r.ok:
+            raise RuntimeError(f"IG token refresh -> {r.status_code}: {r.text}")
+        self._set_token(r.json())
 
     def logout(self):
         try:

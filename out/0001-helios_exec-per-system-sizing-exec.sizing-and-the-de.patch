@@ -1,0 +1,245 @@
+From 2c48444af102006c6b4d6248ca1217489c5d3bbc Mon Sep 17 00:00:00 2001
+From: Stuart <stuart@local>
+Date: Sat, 28 Nov 2026 15:55:23 +0000
+Subject: [PATCH] helios_exec: per-system sizing (exec.sizing) and the demo
+ spread bet account
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Stuart decides the size at each step, per system: exec.sizing holds a fixed £/pt
+stake or a system's own £ per R; anything without a row uses the warehouse target.
+H43 VIX is set to a fixed £4/pt.
+
+IG demo logins hold a spread bet and a CFD account. The demo session now switches
+to the spread bet account (or HX_IG_ACCOUNT_ID if set) and the broker refuses to
+trade on a CFD account, since the systems' markets are DFB spread bets. The run
+log says which account it used.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01PaJF5erxAsVSeLZKZmj7PD
+---
+ docs/exec.md             |  8 ++++++--
+ helios_exec/__main__.py  |  4 +++-
+ helios_exec/broker_ig.py | 32 +++++++++++++++++++++++++++++++-
+ helios_exec/plan.py      | 14 +++++++++++---
+ helios_exec/warehouse.py |  9 +++++++++
+ tests/test_exec.py       | 37 +++++++++++++++++++++++++++++++++++++
+ 6 files changed, 97 insertions(+), 7 deletions(-)
+
+diff --git a/docs/exec.md b/docs/exec.md
+index 5f353bd..3760a5a 100644
+--- a/docs/exec.md
++++ b/docs/exec.md
+@@ -15,8 +15,9 @@ can only trade the **IG demo account**; live trading is refused in code and need
+ 5. **Risk checks** (`risk.py`, new risk only; closing and tightening are always allowed): limits from
+    `ref.risk_limits` (total, sector, market, daily loss) plus hard caps in code: £400 risk per order,
+    £25,000 exposure per order, 10 orders per run, 30 open positions, and **no order without a stop**.
+-6. **Sizes** every new position to `gbp_per_r_target` (£250): stake = £ per R ÷ stop distance in IG points,
+-   rounded down to 0.01, never below IG's minimum.
++6. **Sizes** each new position by Stuart's decision for that system in `exec.sizing` (a fixed £/pt stake, or its
++   own £ per R); otherwise `gbp_per_r_target` (£250): stake = £ per R ÷ stop distance in IG points, rounded down
++   to 0.01, never below IG's minimum. **H43 VIX is set to a fixed £4/pt (Stuart, 28 Nov).**
+ 7. **Sends** orders through `broker_ig.py` — the only module that can — and logs every intended order, IG's
+    answer and the P&L to `exec.runs`, `exec.orders`, `exec.holdings`, plus `logs\exec_YYYY-MM-DD.log`.
+ 
+@@ -27,6 +28,9 @@ Version 0.1 trades **H43 VIX only** (the rule ProOrder can't run). Other systems
+ 1. Open an **IG demo account** (free) and create an API key in its settings (My IG → Settings → API keys).
+ 2. Add to `.env` (never committed): `HX_IG_API_KEY=…`, `HX_IG_USERNAME=…`, `HX_IG_PASSWORD=…`.
+    These are separate from the `IG_*` live read-only settings the data job uses, so the two can't be mixed.
++   An IG demo login holds a **spread bet** and a **CFD** account; the program always switches to the spread bet
++   account (the systems trade DFB spread bets) and refuses to trade on a CFD account. If there is more than one
++   spread bet account, set `HX_IG_ACCOUNT_ID=…` to choose. The dry run prints which account it used.
+ 3. Dry run (places nothing, shows what it would do):
+    `.venv\Scripts\python.exe -m helios_exec`
+ 4. When happy, switch it on in the warehouse: `UPDATE helios.exec.control SET enabled = TRUE, note = '…', updated_utc = now()`
+diff --git a/helios_exec/__main__.py b/helios_exec/__main__.py
+index fba3daa..84692c9 100644
+--- a/helios_exec/__main__.py
++++ b/helios_exec/__main__.py
+@@ -80,7 +80,8 @@ def run(settings: Settings, broker=None, con=None, flatten: bool = False) -> dic
+             need = {t["epic"] for t in tmap.values() if t["want_position"] and t["may_enter"]
+                     and t["system_id"] not in {h["system_id"] for h in held}}
+             markets = {e: broker.market(e) for e in need} if broker else {}
+-            actions = plan.build(list(tmap.values()), held, markets, gbp_per_r, wh.now(), settings.tag, stopped)
++            actions = plan.build(list(tmap.values()), held, markets, gbp_per_r, wh.now(), settings.tag, stopped,
++                                 wh.sizing(con))
+             actions = risk.check(actions, held, limits, settings, wh.realised_today(con, settings.mode), gbp_per_r)
+ 
+         for a in actions:
+@@ -138,6 +139,7 @@ def main(argv=None):
+         ig = DemoIG()                      # always the IG DEMO environment in this version
+         ig.login()
+         broker = IGBroker(ig, allow_orders=(args.mode == "demo"))
++        log.info("Connected to %s", broker.account)
+     try:
+         out = run(s, broker=broker, flatten=args.flatten)
+         log.info("run %s: %s", out.get("run_id"), out.get("status"))
+diff --git a/helios_exec/broker_ig.py b/helios_exec/broker_ig.py
+index 6603499..7c2265e 100644
+--- a/helios_exec/broker_ig.py
++++ b/helios_exec/broker_ig.py
+@@ -19,10 +19,15 @@ class IGBroker:
+         if allow_orders and "demo-api" not in ig.base:
+             raise SystemExit("Refusing to trade: not connected to IG's DEMO environment (set IG_ACC_TYPE=DEMO "
+                              "and use the demo API key). Live trading is not enabled in this version.")
++        if allow_orders and getattr(ig, "account_type", "SPREADBET") != "SPREADBET":
++            raise SystemExit(f"Refusing to trade: the session is on a {ig.account_type} account; the systems' "
++                             "markets are spread bets (DFB). Set HX_IG_ACCOUNT_ID to the demo spread bet account.")
+ 
+     @property
+     def account(self) -> str:
+-        return "IG DEMO" if "demo-api" in self.ig.base else "IG LIVE (read-only)"
++        env = "IG DEMO" if "demo-api" in self.ig.base else "IG LIVE (read-only)"
++        acc = getattr(self.ig, "account_id", None)
++        return f"{env} {getattr(self.ig, 'account_type', '')} {acc or ''}".strip()
+ 
+     # --- reads -------------------------------------------------------------------------------------------------
+     def market(self, epic: str) -> dict:
+@@ -122,12 +127,37 @@ class DemoIG:
+         return r
+ 
+     def login(self):
++        import os
+         r = self._req("POST", "/session", "2", json={"identifier": self._user, "password": self._pw})
+         self.s.headers["CST"] = r.headers["CST"]
+         self.s.headers["X-SECURITY-TOKEN"] = r.headers["X-SECURITY-TOKEN"]
++        body = r.json()
++        want = choose_account(body.get("accounts") or [], body.get("currentAccountId"), os.getenv("HX_IG_ACCOUNT_ID"))
++        if want["accountId"] != body.get("currentAccountId"):
++            s = self._req("PUT", "/session", "1", json={"accountId": want["accountId"], "defaultAccount": False})
++            if s.headers.get("X-SECURITY-TOKEN"):
++                self.s.headers["X-SECURITY-TOKEN"] = s.headers["X-SECURITY-TOKEN"]
++        self.account_id, self.account_type = want["accountId"], want.get("accountType")
+ 
+     def logout(self):
+         try:
+             self._req("DELETE", "/session")
+         except Exception:
+             pass
++
++
++def choose_account(accounts: list[dict], current: str | None, wanted_id: str | None) -> dict:
++    """IG demo logins hold a spread bet and a CFD account. Pick HX_IG_ACCOUNT_ID if set, otherwise the
++    spread bet account (the systems trade DFB spread bets). Never silently fall back to a CFD account."""
++    if wanted_id:
++        for a in accounts:
++            if a.get("accountId") == wanted_id:
++                return a
++        raise SystemExit(f"HX_IG_ACCOUNT_ID {wanted_id} is not one of this login's accounts: "
++                         + ", ".join(f"{a.get('accountId')} ({a.get('accountType')})" for a in accounts))
++    bets = [a for a in accounts if a.get("accountType") == "SPREADBET"]
++    if not bets:
++        raise SystemExit("No spread bet account on this IG demo login: "
++                         + ", ".join(f"{a.get('accountId')} ({a.get('accountType')})" for a in accounts))
++    cur = [a for a in bets if a.get("accountId") == current]
++    return cur[0] if cur else bets[0]
+diff --git a/helios_exec/plan.py b/helios_exec/plan.py
+index 6a602d3..ad5fa2d 100644
+--- a/helios_exec/plan.py
++++ b/helios_exec/plan.py
+@@ -56,10 +56,13 @@ def stake(gbp_per_r: float, risk_1r_ig: float, min_size: float) -> tuple[float,
+ 
+ 
+ def build(targets: list[dict], held: list[dict], markets: dict[str, dict], gbp_per_r: float,
+-          now: datetime, tag: str = "HX", recently_stopped: set[str] | None = None) -> list[Action]:
++          now: datetime, tag: str = "HX", recently_stopped: set[str] | None = None,
++          sizing: dict[str, dict] | None = None) -> list[Action]:
+     """targets: rows of live.exec_targets; held: this program's open positions on IG, each with system_id.
+-    markets: epic -> broker.market() dict. recently_stopped: system_ids waiting out a re-entry pause."""
++    markets: epic -> broker.market() dict. recently_stopped: system_ids waiting out a re-entry pause.
++    sizing: system_id -> {"fixed_stake": £/pt or None, "gbp_per_r": £ or None} (exec.sizing); default gbp_per_r."""
+     recently_stopped = recently_stopped or set()
++    sizing = sizing or {}
+     by_system = {h["system_id"]: h for h in held}
+     actions: list[Action] = []
+     for t in targets:
+@@ -92,7 +95,12 @@ def build(targets: list[dict], held: list[dict], markets: dict[str, dict], gbp_p
+             if m.get("min_stop") and stop_dist < m["min_stop"]:
+                 actions.append(Action("skip", **base, reason=f"stop {stop_dist} closer than IG's minimum {m['min_stop']}"))
+                 continue
+-            size, note = stake(gbp_per_r, stop_dist, m.get("min_size", 0.01))
++            rule = sizing.get(sid) or {}
++            fixed = num(rule.get("fixed_stake"))
++            if fixed is not None:
++                size, note = max(fixed, m.get("min_size", 0.01)), f"fixed stake £{fixed}/pt (exec.sizing)"
++            else:
++                size, note = stake(num(rule.get("gbp_per_r")) or gbp_per_r, stop_dist, m.get("min_size", 0.01))
+             actions.append(Action("open", **base, size=size, stop_distance=stop_dist, limit_distance=limit_dist,
+                                   reason=f"rule says enter ({t['source_status']})" + (f"; {note}" if note else ""),
+                                   extra={"deal_reference": deal_reference(tag, sid, now), "expiry": m.get("expiry", "-"),
+diff --git a/helios_exec/warehouse.py b/helios_exec/warehouse.py
+index dafa9a6..ec6276a 100644
+--- a/helios_exec/warehouse.py
++++ b/helios_exec/warehouse.py
+@@ -43,6 +43,15 @@ def limits(con) -> dict[str, float]:
+     return {r[0]: float(r[1]) for r in con.execute("SELECT limit_name, value FROM ref.risk_limits").fetchall()}
+ 
+ 
++def sizing(con) -> dict[str, dict]:
++    """Per-system sizing decisions (exec.sizing): a fixed £/pt stake or a £ per R, set by Stuart at each step."""
++    try:
++        rows = con.execute("SELECT system_id, fixed_stake, gbp_per_r FROM exec.sizing").fetchall()
++    except duckdb.CatalogException:
++        return {}
++    return {r[0]: {"fixed_stake": r[1], "gbp_per_r": r[2]} for r in rows}
++
++
+ def sectors(con) -> dict[str, str]:
+     return dict(con.execute("SELECT symbol, sector FROM ref.sectors").fetchall())
+ 
+diff --git a/tests/test_exec.py b/tests/test_exec.py
+index 62e2b5d..446df56 100644
+--- a/tests/test_exec.py
++++ b/tests/test_exec.py
+@@ -33,6 +33,7 @@ def make_db(path, enabled=True):
+     con.execute("CREATE TABLE ref.risk_limits (limit_name VARCHAR, value DOUBLE)")
+     con.execute("INSERT INTO ref.risk_limits VALUES ('gbp_per_r_target', 250), ('max_open_r_total', 20), "
+                 "('max_open_r_sector', 8), ('max_open_r_market', 4), ('daily_loss_limit_r', -6)")
++    con.execute("CREATE TABLE exec.sizing (system_id VARCHAR, fixed_stake DOUBLE, gbp_per_r DOUBLE, note VARCHAR)")
+     con.execute("CREATE TABLE ref.sectors (symbol VARCHAR, sector VARCHAR)")
+     con.execute("INSERT INTO ref.sectors VALUES ('VIX', 'Volatility'), ('US500', 'US indices')")
+     return con
+@@ -226,3 +227,39 @@ def test_demo_session_only_knows_the_demo_url(monkeypatch):
+     for k in ("HX_IG_API_KEY", "HX_IG_USERNAME", "HX_IG_PASSWORD"):
+         monkeypatch.setenv(k, "x")
+     assert DemoIG().base == "https://demo-api.ig.com/gateway/deal"
++
++
++def test_fixed_stake_for_h43(db):
++    set_h43(db, calm=True)
++    db.execute("INSERT INTO exec.sizing VALUES ('H43 VIX', 4, NULL, 'Stuart 28 Nov: keep H43 at £4/pt')")
++    b = FakeBroker(); b.market = lambda e: {**FakeBroker.market(b, e), "min_size": 0.5}
++    run(Settings(mode="demo"), broker=b, con=db)
++    assert b.calls[0][3] == 4
++
++
++def test_per_system_gbp_per_r():
++    t = [{"system_id": "H14 XAUUSD", "symbol": "XAUUSD", "sector": "Precious metals", "epic": "E", "direction": "BUY",
++          "want_position": True, "may_enter": True, "source_status": "new", "stop_mode": "distance",
++          "stop_distance_ig": 200, "limit_distance_ig": None, "stop_below_close_ig": None, "stop_pct": None}]
++    m = {"E": {"status": "TRADEABLE", "bid": 3600, "offer": 3601, "min_size": 0.01, "min_stop": 1}}
++    a = plan.build(t, [], m, 250, datetime(2026, 11, 30), sizing={"H14 XAUUSD": {"fixed_stake": None, "gbp_per_r": 50}})
++    assert a[0].size == 0.25                                   # £50 per R / 200 points
++
++
++def test_spread_bet_account_is_chosen():
++    from helios_exec.broker_ig import choose_account
++    accs = [{"accountId": "CFD1", "accountType": "CFD"}, {"accountId": "SB1", "accountType": "SPREADBET"}]
++    assert choose_account(accs, "CFD1", None)["accountId"] == "SB1"
++    assert choose_account(accs, "SB1", None)["accountId"] == "SB1"
++    with pytest.raises(SystemExit):
++        choose_account([{"accountId": "CFD1", "accountType": "CFD"}], "CFD1", None)
++    with pytest.raises(SystemExit):
++        choose_account(accs, "CFD1", "NOPE")
++
++
++def test_broker_refuses_cfd_account():
++    class CfdIG:
++        base = "https://demo-api.ig.com/gateway/deal"
++        account_type = "CFD"
++    with pytest.raises(SystemExit):
++        IGBroker(CfdIG(), allow_orders=True)
+-- 
+2.43.0
+

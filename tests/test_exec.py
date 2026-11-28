@@ -263,3 +263,39 @@ def test_broker_refuses_cfd_account():
         account_type = "CFD"
     with pytest.raises(SystemExit):
         IGBroker(CfdIG(), allow_orders=True)
+
+
+class FakeResp:
+    def __init__(self, code, js=None, headers=None):
+        self.status_code, self._js, self.headers = code, js or {}, headers or {}
+        self.ok = code < 400
+        self.text = str(js)
+
+    def json(self):
+        return self._js
+
+
+def test_migrated_account_uses_v3_login(monkeypatch):
+    from helios_exec.broker_ig import DemoIG
+    for k in ("HX_IG_API_KEY", "HX_IG_USERNAME", "HX_IG_PASSWORD"):
+        monkeypatch.setenv(k, "x")
+    monkeypatch.delenv("HX_IG_ACCOUNT_ID", raising=False)
+    ig = DemoIG()
+    seen = []
+
+    def fake(method, url, headers=None, **kw):
+        seen.append((method, url.split("/deal")[1], headers.get("Version")))
+        path = url.split("/deal")[1]
+        if path == "/session" and headers["Version"] == "2":
+            return FakeResp(401, {"errorCode": "error.security.account-migrated"})
+        if path == "/session" and headers["Version"] == "3":
+            return FakeResp(200, {"accountId": "CFD1", "oauthToken": {"access_token": "A", "refresh_token": "R"}})
+        if path == "/accounts":
+            return FakeResp(200, {"accounts": [{"accountId": "CFD1", "accountType": "CFD"},
+                                               {"accountId": "SB1", "accountType": "SPREADBET"}]})
+        return FakeResp(404, {})
+    ig.s.request = fake
+    ig.login()
+    assert ig.account_type == "SPREADBET" and ig.s.headers["IG-ACCOUNT-ID"] == "SB1"
+    assert ig.s.headers["Authorization"] == "Bearer A"
+    assert ("POST", "/session", "3") in seen
