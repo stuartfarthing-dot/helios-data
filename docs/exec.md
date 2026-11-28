@@ -15,8 +15,9 @@ can only trade the **IG demo account**; live trading is refused in code and need
 5. **Risk checks** (`risk.py`, new risk only; closing and tightening are always allowed): limits from
    `ref.risk_limits` (total, sector, market, daily loss) plus hard caps in code: £400 risk per order,
    £25,000 exposure per order, 10 orders per run, 30 open positions, and **no order without a stop**.
-6. **Sizes** every new position to `gbp_per_r_target` (£250): stake = £ per R ÷ stop distance in IG points,
-   rounded down to 0.01, never below IG's minimum.
+6. **Sizes** each new position by Stuart's decision for that system in `exec.sizing` (a fixed £/pt stake, or its
+   own £ per R); otherwise `gbp_per_r_target` (£250): stake = £ per R ÷ stop distance in IG points, rounded down
+   to 0.01, never below IG's minimum. **H43 VIX is set to a fixed £4/pt (Stuart, 28 Nov).**
 7. **Sends** orders through `broker_ig.py` — the only module that can — and logs every intended order, IG's
    answer and the P&L to `exec.runs`, `exec.orders`, `exec.holdings`, plus `logs\exec_YYYY-MM-DD.log`.
 
@@ -27,6 +28,9 @@ Version 0.1 trades **H43 VIX only** (the rule ProOrder can't run). Other systems
 1. Open an **IG demo account** (free) and create an API key in its settings (My IG → Settings → API keys).
 2. Add to `.env` (never committed): `HX_IG_API_KEY=…`, `HX_IG_USERNAME=…`, `HX_IG_PASSWORD=…`.
    These are separate from the `IG_*` live read-only settings the data job uses, so the two can't be mixed.
+   An IG demo login holds a **spread bet** and a **CFD** account; the program always switches to the spread bet
+   account (the systems trade DFB spread bets) and refuses to trade on a CFD account. If there is more than one
+   spread bet account, set `HX_IG_ACCOUNT_ID=…` to choose. The dry run prints which account it used.
 3. Dry run (places nothing, shows what it would do):
    `.venv\Scripts\python.exe -m helios_exec`
 4. When happy, switch it on in the warehouse: `UPDATE helios.exec.control SET enabled = TRUE, note = '…', updated_utc = now()`

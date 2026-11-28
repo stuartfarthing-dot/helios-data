@@ -43,6 +43,15 @@ def limits(con) -> dict[str, float]:
     return {r[0]: float(r[1]) for r in con.execute("SELECT limit_name, value FROM ref.risk_limits").fetchall()}
 
 
+def sizing(con) -> dict[str, dict]:
+    """Per-system sizing decisions (exec.sizing): a fixed £/pt stake or a £ per R, set by Stuart at each step."""
+    try:
+        rows = con.execute("SELECT system_id, fixed_stake, gbp_per_r FROM exec.sizing").fetchall()
+    except duckdb.CatalogException:
+        return {}
+    return {r[0]: {"fixed_stake": r[1], "gbp_per_r": r[2]} for r in rows}
+
+
 def sectors(con) -> dict[str, str]:
     return dict(con.execute("SELECT symbol, sector FROM ref.sectors").fetchall())
 

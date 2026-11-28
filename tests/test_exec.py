@@ -33,6 +33,7 @@ def make_db(path, enabled=True):
     con.execute("CREATE TABLE ref.risk_limits (limit_name VARCHAR, value DOUBLE)")
     con.execute("INSERT INTO ref.risk_limits VALUES ('gbp_per_r_target', 250), ('max_open_r_total', 20), "
                 "('max_open_r_sector', 8), ('max_open_r_market', 4), ('daily_loss_limit_r', -6)")
+    con.execute("CREATE TABLE exec.sizing (system_id VARCHAR, fixed_stake DOUBLE, gbp_per_r DOUBLE, note VARCHAR)")
     con.execute("CREATE TABLE ref.sectors (symbol VARCHAR, sector VARCHAR)")
     con.execute("INSERT INTO ref.sectors VALUES ('VIX', 'Volatility'), ('US500', 'US indices')")
     return con
@@ -226,3 +227,39 @@ def test_demo_session_only_knows_the_demo_url(monkeypatch):
     for k in ("HX_IG_API_KEY", "HX_IG_USERNAME", "HX_IG_PASSWORD"):
         monkeypatch.setenv(k, "x")
     assert DemoIG().base == "https://demo-api.ig.com/gateway/deal"
+
+
+def test_fixed_stake_for_h43(db):
+    set_h43(db, calm=True)
+    db.execute("INSERT INTO exec.sizing VALUES ('H43 VIX', 4, NULL, 'Stuart 28 Nov: keep H43 at £4/pt')")
+    b = FakeBroker(); b.market = lambda e: {**FakeBroker.market(b, e), "min_size": 0.5}
+    run(Settings(mode="demo"), broker=b, con=db)
+    assert b.calls[0][3] == 4
+
+
+def test_per_system_gbp_per_r():
+    t = [{"system_id": "H14 XAUUSD", "symbol": "XAUUSD", "sector": "Precious metals", "epic": "E", "direction": "BUY",
+          "want_position": True, "may_enter": True, "source_status": "new", "stop_mode": "distance",
+          "stop_distance_ig": 200, "limit_distance_ig": None, "stop_below_close_ig": None, "stop_pct": None}]
+    m = {"E": {"status": "TRADEABLE", "bid": 3600, "offer": 3601, "min_size": 0.01, "min_stop": 1}}
+    a = plan.build(t, [], m, 250, datetime(2026, 11, 30), sizing={"H14 XAUUSD": {"fixed_stake": None, "gbp_per_r": 50}})
+    assert a[0].size == 0.25                                   # £50 per R / 200 points
+
+
+def test_spread_bet_account_is_chosen():
+    from helios_exec.broker_ig import choose_account
+    accs = [{"accountId": "CFD1", "accountType": "CFD"}, {"accountId": "SB1", "accountType": "SPREADBET"}]
+    assert choose_account(accs, "CFD1", None)["accountId"] == "SB1"
+    assert choose_account(accs, "SB1", None)["accountId"] == "SB1"
+    with pytest.raises(SystemExit):
+        choose_account([{"accountId": "CFD1", "accountType": "CFD"}], "CFD1", None)
+    with pytest.raises(SystemExit):
+        choose_account(accs, "CFD1", "NOPE")
+
+
+def test_broker_refuses_cfd_account():
+    class CfdIG:
+        base = "https://demo-api.ig.com/gateway/deal"
+        account_type = "CFD"
+    with pytest.raises(SystemExit):
+        IGBroker(CfdIG(), allow_orders=True)

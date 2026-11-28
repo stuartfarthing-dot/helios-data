@@ -80,7 +80,8 @@ def run(settings: Settings, broker=None, con=None, flatten: bool = False) -> dic
             need = {t["epic"] for t in tmap.values() if t["want_position"] and t["may_enter"]
                     and t["system_id"] not in {h["system_id"] for h in held}}
             markets = {e: broker.market(e) for e in need} if broker else {}
-            actions = plan.build(list(tmap.values()), held, markets, gbp_per_r, wh.now(), settings.tag, stopped)
+            actions = plan.build(list(tmap.values()), held, markets, gbp_per_r, wh.now(), settings.tag, stopped,
+                                 wh.sizing(con))
             actions = risk.check(actions, held, limits, settings, wh.realised_today(con, settings.mode), gbp_per_r)
 
         for a in actions:
@@ -138,6 +139,7 @@ def main(argv=None):
         ig = DemoIG()                      # always the IG DEMO environment in this version
         ig.login()
         broker = IGBroker(ig, allow_orders=(args.mode == "demo"))
+        log.info("Connected to %s", broker.account)
     try:
         out = run(s, broker=broker, flatten=args.flatten)
         log.info("run %s: %s", out.get("run_id"), out.get("status"))

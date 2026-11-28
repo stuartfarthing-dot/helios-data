@@ -19,10 +19,15 @@ class IGBroker:
         if allow_orders and "demo-api" not in ig.base:
             raise SystemExit("Refusing to trade: not connected to IG's DEMO environment (set IG_ACC_TYPE=DEMO "
                              "and use the demo API key). Live trading is not enabled in this version.")
+        if allow_orders and getattr(ig, "account_type", "SPREADBET") != "SPREADBET":
+            raise SystemExit(f"Refusing to trade: the session is on a {ig.account_type} account; the systems' "
+                             "markets are spread bets (DFB). Set HX_IG_ACCOUNT_ID to the demo spread bet account.")
 
     @property
     def account(self) -> str:
-        return "IG DEMO" if "demo-api" in self.ig.base else "IG LIVE (read-only)"
+        env = "IG DEMO" if "demo-api" in self.ig.base else "IG LIVE (read-only)"
+        acc = getattr(self.ig, "account_id", None)
+        return f"{env} {getattr(self.ig, 'account_type', '')} {acc or ''}".strip()
 
     # --- reads -------------------------------------------------------------------------------------------------
     def market(self, epic: str) -> dict:
@@ -122,12 +127,37 @@ class DemoIG:
         return r
 
     def login(self):
+        import os
         r = self._req("POST", "/session", "2", json={"identifier": self._user, "password": self._pw})
         self.s.headers["CST"] = r.headers["CST"]
         self.s.headers["X-SECURITY-TOKEN"] = r.headers["X-SECURITY-TOKEN"]
+        body = r.json()
+        want = choose_account(body.get("accounts") or [], body.get("currentAccountId"), os.getenv("HX_IG_ACCOUNT_ID"))
+        if want["accountId"] != body.get("currentAccountId"):
+            s = self._req("PUT", "/session", "1", json={"accountId": want["accountId"], "defaultAccount": False})
+            if s.headers.get("X-SECURITY-TOKEN"):
+                self.s.headers["X-SECURITY-TOKEN"] = s.headers["X-SECURITY-TOKEN"]
+        self.account_id, self.account_type = want["accountId"], want.get("accountType")
 
     def logout(self):
         try:
             self._req("DELETE", "/session")
         except Exception:
             pass
+
+
+def choose_account(accounts: list[dict], current: str | None, wanted_id: str | None) -> dict:
+    """IG demo logins hold a spread bet and a CFD account. Pick HX_IG_ACCOUNT_ID if set, otherwise the
+    spread bet account (the systems trade DFB spread bets). Never silently fall back to a CFD account."""
+    if wanted_id:
+        for a in accounts:
+            if a.get("accountId") == wanted_id:
+                return a
+        raise SystemExit(f"HX_IG_ACCOUNT_ID {wanted_id} is not one of this login's accounts: "
+                         + ", ".join(f"{a.get('accountId')} ({a.get('accountType')})" for a in accounts))
+    bets = [a for a in accounts if a.get("accountType") == "SPREADBET"]
+    if not bets:
+        raise SystemExit("No spread bet account on this IG demo login: "
+                         + ", ".join(f"{a.get('accountId')} ({a.get('accountType')})" for a in accounts))
+    cur = [a for a in bets if a.get("accountId") == current]
+    return cur[0] if cur else bets[0]

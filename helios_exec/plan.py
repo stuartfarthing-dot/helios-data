@@ -56,10 +56,13 @@ def stake(gbp_per_r: float, risk_1r_ig: float, min_size: float) -> tuple[float, 
 
 
 def build(targets: list[dict], held: list[dict], markets: dict[str, dict], gbp_per_r: float,
-          now: datetime, tag: str = "HX", recently_stopped: set[str] | None = None) -> list[Action]:
+          now: datetime, tag: str = "HX", recently_stopped: set[str] | None = None,
+          sizing: dict[str, dict] | None = None) -> list[Action]:
     """targets: rows of live.exec_targets; held: this program's open positions on IG, each with system_id.
-    markets: epic -> broker.market() dict. recently_stopped: system_ids waiting out a re-entry pause."""
+    markets: epic -> broker.market() dict. recently_stopped: system_ids waiting out a re-entry pause.
+    sizing: system_id -> {"fixed_stake": £/pt or None, "gbp_per_r": £ or None} (exec.sizing); default gbp_per_r."""
     recently_stopped = recently_stopped or set()
+    sizing = sizing or {}
     by_system = {h["system_id"]: h for h in held}
     actions: list[Action] = []
     for t in targets:
@@ -92,7 +95,12 @@ def build(targets: list[dict], held: list[dict], markets: dict[str, dict], gbp_p
             if m.get("min_stop") and stop_dist < m["min_stop"]:
                 actions.append(Action("skip", **base, reason=f"stop {stop_dist} closer than IG's minimum {m['min_stop']}"))
                 continue
-            size, note = stake(gbp_per_r, stop_dist, m.get("min_size", 0.01))
+            rule = sizing.get(sid) or {}
+            fixed = num(rule.get("fixed_stake"))
+            if fixed is not None:
+                size, note = max(fixed, m.get("min_size", 0.01)), f"fixed stake £{fixed}/pt (exec.sizing)"
+            else:
+                size, note = stake(num(rule.get("gbp_per_r")) or gbp_per_r, stop_dist, m.get("min_size", 0.01))
             actions.append(Action("open", **base, size=size, stop_distance=stop_dist, limit_distance=limit_dist,
                                   reason=f"rule says enter ({t['source_status']})" + (f"; {note}" if note else ""),
                                   extra={"deal_reference": deal_reference(tag, sid, now), "expiry": m.get("expiry", "-"),
